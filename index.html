@@ -27,6 +27,7 @@
   .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
   label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);font-weight:600}
+  label.f textarea{font:inherit;font-size:13px;color:var(--ink);padding:7px 9px;border:1px solid var(--line);border-radius:6px;resize:vertical}
   label.f input,label.f select{font:inherit;color:var(--ink);padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:#fff}
   .status{margin-top:12px;font-size:14px}
   .status .ok{color:var(--accent);font-weight:600}
@@ -64,6 +65,8 @@
   table.rep.pk2 td.nf{width:110px}
   table.rep.pk3 td.nf{width:160px}
   table.rep.pk4 td.nf{width:210px}
+  table.rep td.sec{background:#dfe8f1;font-weight:800;letter-spacing:1px;color:#14263a;border-bottom:1px solid #9fb6cc}
+  table.rep td.gt{border-top:3px double #333}
   table.rep td.nflast{border-bottom:1px solid #444}
   table.rep td.nfc{font-weight:700;text-align:center;border-bottom:none}
   table.rep td.t{border-top:2px solid #333;font-weight:700;padding-top:6px}
@@ -124,7 +127,22 @@
           <option value="trib">Tributável (qTrib / uTrib)</option>
         </select>
       </label>
+      <label class="f">Separar por região
+        <select id="optSplit">
+          <option value="1">Congelado e Seco (separados)</option>
+          <option value="0">Não separar</option>
+        </select>
+      </label>
     </div>
+    <details id="regBox" style="margin-top:12px">
+      <summary>Configurar o que é CONGELADO (o resto vai para SECO)</summary>
+      <div class="grid" style="margin-top:10px">
+        <label class="f" style="grid-column:span 2">Códigos de produto congelados (separados por vírgula)<textarea id="regCodes" rows="2"></textarea></label>
+        <label class="f" style="grid-column:span 2">Palavras na descrição que indicam congelado<textarea id="regWords" rows="2"></textarea></label>
+        <label class="f" style="grid-column:span 2">Códigos que são sempre SECO (exceções)<textarea id="regSeco" rows="2" placeholder="ex.: um caldo sabor carne"></textarea></label>
+      </div>
+      <div class="row" style="margin-top:8px"><button class="btn" id="regReset">Voltar ao padrão</button><span class="small">Fica salvo neste navegador.</span></div>
+    </details>
     <div class="row" style="margin-top:14px">
       <button class="btn primary" id="btnXlsx" disabled>Baixar Excel (.xlsx)</button>
       <button class="btn" id="btnPdf" disabled>Baixar PDF</button>
@@ -212,6 +230,21 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   var report = null;       // resultado montado
 
   // ---------- preferências (só neste navegador) ----------
+  // Itens CONGELADOS (lista da câmara fria). O que não estiver aqui vai para SECO.
+  var REG_DEFAULT = {
+    codes: "16090, 16092, 16091, 16094, 16089, 16093, 8485, 13387, 10055, 10056, 16108, 13643, 481, 12014, 12358, 12015, 12658, 12490, 5184",
+    words: "CARNE, BOVIN, SUIN, FRANGO, SASSAMI, IQF, AIPIM, BROCOLIS, SELETA DE LEGUMES, PEIXE, CONGELAD"
+  };
+  function normTxt(s){ return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase(); }
+  function listOf(s){ return String(s || "").split(/[,;\n]+/).map(function(x){ return x.trim(); }).filter(Boolean); }
+  function regionOf(it){
+    var cod = String(it.cProd).trim();
+    if (listOf($("regSeco").value).indexOf(cod) >= 0) return "SECO";
+    if (listOf($("regCodes").value).indexOf(cod) >= 0) return "CONGELADO";
+    var d = normTxt(it.xProd);
+    if (listOf($("regWords").value).some(function(w){ w = normTxt(w); return w && d.indexOf(w) >= 0; })) return "CONGELADO";
+    return "SECO";
+  }
   function loadPrefs(){
     try{
       var p = JSON.parse(localStorage.getItem("relxml-prefs") || "{}");
@@ -219,12 +252,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (p.transp) $("optTransp").value = p.transp;
       if (p.sort) $("optSort").value = p.sort;
       if (p.qty) $("optQty").value = p.qty;
+      if (p.split) $("optSplit").value = p.split;
+      $("regCodes").value = p.regCodes != null ? p.regCodes : REG_DEFAULT.codes;
+      $("regWords").value = p.regWords != null ? p.regWords : REG_DEFAULT.words;
+      $("regSeco").value = p.regSeco != null ? p.regSeco : "";
     }catch(e){}
   }
   function savePrefs(){
     try{
       localStorage.setItem("relxml-prefs", JSON.stringify({
-        title:$("optTitle").value, transp:$("optTransp").value, sort:$("optSort").value, qty:$("optQty").value
+        title:$("optTitle").value, transp:$("optTransp").value, sort:$("optSort").value, qty:$("optQty").value,
+        split:$("optSplit").value, regCodes:$("regCodes").value, regWords:$("regWords").value, regSeco:$("regSeco").value
       }));
     }catch(e){}
   }
@@ -353,6 +391,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       });
     });
     var items = order.map(function(k){ return groups[k]; });
+    items.forEach(function(i){ i.region = regionOf(i); });
     // arredonda para evitar resíduos de ponto flutuante (ex.: 231,39800000000002)
     items.forEach(function(i){ i.qty = r6(i.qty); i.perOrder.forEach(function(k){ var p = i.per[k]; p.qty = r6(p.qty); p.val = r2(p.val); }); });
     // unidade mais comum = cabeçalho da coluna
@@ -399,11 +438,49 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function totalUnits(){
     return Object.keys(report.totals).sort(function(a,b){ return a === report.mainUnit ? -1 : b === report.mainUnit ? 1 : a.localeCompare(b); });
   }
+  // Lado dos produtos: seções CONGELADO e SECO, cada uma com seu total; no fim, TOTAL GERAL.
+  function unitsSorted(obj){
+    return Object.keys(obj).sort(function(a,b){ return a === report.mainUnit ? -1 : b === report.mainUnit ? 1 : a.localeCompare(b); });
+  }
+  function prodLines(){
+    var r = report, L = [];
+    var pushItems = function(idxs){ idxs.forEach(function(i){ L.push({kind:"item", i:i}); }); };
+    var pushTotals = function(label, idxs, extra){
+      var t = {}; idxs.forEach(function(i){ var it = r.items[i]; t[it.unit] = r6((t[it.unit] || 0) + it.qty); });
+      var first = L.length;
+      unitsSorted(t).forEach(function(u, j){
+        L.push({kind:"tot", tot: j === 0 ? 1 : 2, label: j === 0 ? label : label + " " + u, unit:u, qty:t[u], from:extra.from, to:extra.to, refs:extra.refs, grand:!!extra.grand});
+      });
+      return first;
+    };
+    var split = $("optSplit").value === "1";
+    if (!split){
+      pushItems(r.items.map(function(_, i){ return i; }));
+      pushTotals("TOTAL", r.items.map(function(_, i){ return i; }), {from:0, to:L.length - 1});
+      return L;
+    }
+    var secs = ["CONGELADO", "SECO"].map(function(name){
+      return {name:name, idx:r.items.map(function(it, i){ return it.region === name ? i : -1; }).filter(function(i){ return i >= 0; })};
+    }).filter(function(s){ return s.idx.length; });
+    var mainRefs = [];
+    secs.forEach(function(s, si){
+      if (si > 0) L.push({kind:"blank"});
+      L.push({kind:"sec", label:s.name});
+      var from = L.length; pushItems(s.idx);
+      var at = pushTotals("TOTAL " + s.name, s.idx, {from:from, to:L.length - 1});
+      if (L[at].unit === r.mainUnit) mainRefs.push(at);
+    });
+    if (secs.length > 1){
+      L.push({kind:"blank"});
+      pushTotals("TOTAL GERAL", r.items.map(function(_, i){ return i; }), {refs:mainRefs, grand:true});
+    }
+    return L;
+  }
   // Coluna de NFs: quando há muitas notas, coloca 2, 3 ou 4 números por linha (em fonte menor)
   // para a lista caber na mesma página dos produtos. Produtos não mudam.
   var PAGE_ROWS = 38;   // linhas de produto que cabem com folga na 1ª página (PDF A4)
-  function nfLayout(){
-    var r = report, target = Math.max(r.items.length + totalUnits().length, PAGE_ROWS), k = 1;
+  function nfLayout(P){
+    var r = report, target = Math.max(P, PAGE_ROWS), k = 1;
     var count = function(k){ return r.nfGroups.reduce(function(a,g){ return a + 1 + Math.ceil(g.nums.length / k); }, 0) + 1; };
     while (k < 4 && count(k) > target) k++;
     var lines = [];
@@ -414,24 +491,24 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return {lines:lines, k:k};
   }
   function rows(){
-    var lay = nfLayout(), nfCol = lay.lines;
-    var r = report, I = r.items.length, N = nfCol.length, units = totalUnits();
-    var n = Math.max(I + units.length, N + 1), out = [];
+    var PL = prodLines(), lay = nfLayout(PL.length), nfCol = lay.lines;
+    var r = report, N = nfCol.length;
+    var n = Math.max(PL.length, N + 1), out = [];
     for (var k=0;k<n;k++){
-      var it = r.items[k], nf = nfCol[k], ti = k - I, u = units[ti];
+      var p = PL[k] || {kind:""}, nf = nfCol[k], it = p.kind === "item" ? r.items[p.i] : null;
       var row = {
         nf: nf ? nf.text : (k === N ? notes.length + " nota(s)" : ""), nfIsUf: nf ? nf.uf : false, pack: lay.k,
         nfBox: k < N, nfLast: k === N - 1, nfCount: k === N,
         uf: k < r.ufs.length ? r.ufs[k] : "",
-        item: it ? k : -1, cod: it ? it.cProd : "", desc: it ? it.xProd : "",
+        kind: p.kind, sec: p.kind === "sec",
+        item: it ? p.i : -1, cod: it ? it.cProd : "", desc: it ? it.xProd : (p.label || ""),
         qty: it ? it.qty : null, qtyTxt: it ? qtyText(it) : "", unit: it ? it.unit : "",
         tot: 0
       };
-      if (!it && ti >= 0 && ti < units.length){
-        row.tot = ti === 0 ? 1 : 2;
-        row.desc = ti === 0 ? "TOTAL" : "TOTAL " + u;
-        row.qty = r.totals[u]; row.unit = u;
-        row.qtyTxt = fmt(r.totals[u]) + (u ? " " + u : "");
+      if (p.kind === "tot"){
+        row.tot = p.tot; row.grand = p.grand; row.qty = p.qty; row.unit = p.unit;
+        row.qtyTxt = fmt(p.qty) + (p.unit ? " " + p.unit : "");
+        row.from = p.from; row.to = p.to; row.refs = p.refs;
       }
       out.push(row);
     }
@@ -498,13 +575,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     var rs = rows();
     var html = '<table class="rep' + (rs.length && rs[0].pack > 1 ? " pk" + rs[0].pack : "") + '"><thead><tr><th>NFs</th><th>UF</th><th class="q" style="text-align:right">CódProd</th><th>Descrição Produtos</th><th class="q">' + esc(qtyHeader()) + "</th></tr></thead><tbody>";
     rs.forEach(function(r, i){
-      var tc = r.tot ? (r.tot === 1 ? " t" : " t2") : "";
+      var tc = r.tot ? (r.tot === 1 ? (r.grand ? " t gt" : " t") : " t2") : (r.sec ? " sec" : "");
       html += "<tr" + (r.item >= 0 ? ' data-item="' + r.item + '" title="Clique para ver em quais notas este item aparece"' : "") + ">" +
         '<td class="' + (r.nfBox ? "nf" : "nfc") + (r.nfIsUf ? " uf" : "") + (r.nfLast ? " nflast" : "") + '">' + esc(r.nf) + "</td>" +
         '<td class="uf">' + esc(r.uf) + "</td>" +
         '<td class="cod' + tc + '">' + esc(r.cod) + "</td>" +
         '<td class="desc' + tc + '">' + esc(r.desc) +
-          (r.tot === 1 && report.pesoB ? ' <span class="small" style="font-weight:400">(peso bruto nas notas: ' + fmt(report.pesoB) + " kg)</span>" : "") + "</td>" +
+          (r.tot === 1 && (r.grand || !rs.some(function(x){ return x.grand; })) && report.pesoB ? ' <span class="small" style="font-weight:400">(peso bruto nas notas: ' + fmt(report.pesoB) + " kg)</span>" : "") + "</td>" +
         '<td class="q' + tc + '">' + esc(r.qtyTxt) + "</td></tr>";
     });
     html += "</tbody></table>";
@@ -743,7 +820,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     var HR = 6;
     var hs = function(right){ return {bold:true, size:12, color:"FF14263A", fill:"FFB7CDE0", h: right ? "right" : "left", border:{b:"thin"}}; };
     ["NFs","UF","CódProd","Descrição Produtos", qtyHeader()].forEach(function(t, i){ set(HR, i+1, {v:t, s:hs(i === 2 || i === 4)}); });
-    var firstData = HR + 1, lastItemRow = HR + report.items.length;
     rs.forEach(function(r, k){
       var row = HR + 1 + k;
       if (r.nfBox){
@@ -752,13 +828,21 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         set(row, 1, {v:nfv, s:{bold:r.nfIsUf, size:(r.pack > 1 && !r.nfIsUf) ? [0,12,10,9,9][r.pack] : 12, v:"top", h: r.nfIsUf ? "left" : "center", border:nfBorder}});
       } else if (r.nfCount) set(row, 1, {v:r.nf, s:{bold:true, size:12, h:"center", v:"top"}});
       if (r.uf) set(row, 2, {v:r.uf, s:{bold:true, size:12, v:"top"}});
-      if (r.tot === 1){
-        var tb = {bold:true, size:12, border:{t:"medium"}};
+      if (r.sec){
+        var ss = {bold:true, size:12, fill:"FFDFE8F1", color:"FF14263A", border:{b:"thin"}};
+        set(row, 3, {v:"", s:ss}); set(row, 4, {v:r.desc, s:ss}); set(row, 5, {v:"", s:ss});
+      } else if (r.tot === 1){
+        var bt = r.grand ? "double" : "medium";
+        var tb = {bold:true, size:12, border:{t:bt}};
         set(row, 3, {v:"", s:tb});
         set(row, 4, {v:r.desc, s:tb});
-        if (r.unit === report.mainUnit)   // SOMA só dos números (unidade principal)
-          set(row, 5, {f:"SUM(F" + firstData + ":F" + lastItemRow + ")", v:r.qty, s:{bold:true, size:12, h:"right", border:{t:"medium"}, fmt:qtyFmt(r.qty)}});
-        else set(row, 5, {v:r.qtyTxt, s:{bold:true, size:12, h:"right", border:{t:"medium"}}});
+        var f = null;   // SOMA só dos números (unidade principal)
+        if (r.unit === report.mainUnit){
+          if (r.refs && r.refs.length) f = "SUM(" + r.refs.map(function(k){ return "F" + (HR + 1 + k); }).join(",") + ")";
+          else if (r.from != null && r.to >= r.from) f = "SUM(F" + (HR + 1 + r.from) + ":F" + (HR + 1 + r.to) + ")";
+        }
+        if (f) set(row, 5, {f:f, v:r.qty, s:{bold:true, size:12, h:"right", border:{t:bt}, fmt:qtyFmt(r.qty)}});
+        else set(row, 5, {v:r.qtyTxt, s:{bold:true, size:12, h:"right", border:{t:bt}}});
       } else if (r.tot === 2){
         set(row, 4, {v:r.desc, s:{bold:true, size:12}});
         set(row, 5, {v:r.qtyTxt, s:{bold:true, size:12, h:"right"}});
@@ -838,7 +922,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
   function linesSheet(){
     var R = [], hs = {bold:true, color:"FF14263A", fill:"FFB7CDE0", border:{b:"thin"}}, hsR = {bold:true, color:"FF14263A", fill:"FFB7CDE0", border:{b:"thin"}, h:"right"};
-    R.push([{v:"NF", s:hsR}, {v:"Série", s:hsR}, {v:"Emissão", s:hs}, {v:"Destinatário", s:hs}, {v:"UF", s:hs}, {v:"CódProd", s:hsR}, {v:"Descrição", s:hs}, {v:"Qtde", s:hsR}, {v:"Unid", s:hs}, {v:"Valor do item", s:hsR}]);
+    R.push([{v:"NF", s:hsR}, {v:"Série", s:hsR}, {v:"Emissão", s:hs}, {v:"Destinatário", s:hs}, {v:"UF", s:hs}, {v:"CódProd", s:hsR}, {v:"Descrição", s:hs}, {v:"Qtde", s:hsR}, {v:"Unid", s:hs}, {v:"Valor do item", s:hsR}, {v:"Região", s:hs}]);
     var all = [];
     report.items.forEach(function(it){ it.perOrder.forEach(function(k){ all.push({it:it, l:it.per[k]}); }); });
     all.sort(function(a,b){ return (Number(a.l.note.nNF) - Number(b.l.note.nNF)) || a.it.xProd.localeCompare(b.it.xProd, "pt-BR"); });
@@ -846,9 +930,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       R.push([/^\d+$/.test(n.nNF) ? Number(n.nNF) : n.nNF, /^\d+$/.test(n.serie) ? Number(n.serie) : n.serie,
         d === null ? "" : {v:d, s:{fmt:"dd/mm/yyyy", h:"left"}}, n.dest, n.uf,
         /^\d+$/.test(o.it.cProd) ? Number(o.it.cProd) : o.it.cProd, o.it.xProd,
-        {v:o.l.qty, s:{fmt:qtyFmt(o.l.qty)}}, o.it.unit, {v:Math.round(o.l.val*100)/100, s:{fmt:'"R$" #,##0.00'}}]);
+        {v:o.l.qty, s:{fmt:qtyFmt(o.l.qty)}}, o.it.unit, {v:Math.round(o.l.val*100)/100, s:{fmt:'"R$" #,##0.00'}}, o.it.region || ""]);
     });
-    return {name:"Itens por nota", cols:[11, 7, 12, 44, 6, 10, 46, 12, 6, 15], rows:R, freeze:1, autoFilter:"A1:J" + R.length, landscape:true, printTitles:"1"};
+    return {name:"Itens por nota", cols:[11, 7, 12, 44, 6, 10, 46, 12, 6, 15, 12], rows:R, freeze:1, autoFilter:"A1:K" + R.length, landscape:true, printTitles:"1"};
   }
   function exportItemXlsx(){
     if (curItem < 0) return;
@@ -948,8 +1032,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         newPage(true);
         var BOTTOM = M + 20;
         rs.forEach(function(r, k){
-          var descLines = r.tot ? [r.desc] : wrap(F, r.desc, FS, cols[3].w - 2*PAD);
-          var rh = Math.max(1, descLines.length) * LH + 5 + (r.tot === 1 ? 3 : 0);
+          var descLines = (r.tot || r.sec) ? [r.desc] : wrap(F, r.desc, FS, cols[3].w - 2*PAD);
+          var rh = Math.max(1, descLines.length) * LH + 5 + (r.tot === 1 ? 3 : 0) + (r.sec ? 3 : 0);
+          if (r.kind === "blank" && !r.nf) rh = 8;
           if (y - rh < BOTTOM){
             // fecha a coluna de NFs na quebra de página
             if (r.nfBox) page.drawLine({start:{x:xs[0], y:y}, end:{x:xs[1], y:y}, thickness:.6, color:dark});
@@ -968,8 +1053,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             }
           }
           if (r.uf) text(page, B, r.uf, FS, xs[1], xs[2], base, "l");
-          var tf = r.tot ? B : F;
+          var tf = (r.tot || r.sec) ? B : F;
+          if (r.sec) page.drawRectangle({x:xs[2], y:top - rh + 1, width:xs[5] - xs[2], height:rh - 1, color:L.rgb(223/255, 232/255, 241/255)});
           if (r.tot === 1) page.drawLine({start:{x:xs[2], y:top - 1}, end:{x:xs[5], y:top - 1}, thickness:1.2, color:black});
+          if (r.grand) page.drawLine({start:{x:xs[2], y:top + 1.5}, end:{x:xs[5], y:top + 1.5}, thickness:.8, color:black});
           if (r.cod) text(page, F, r.cod, FS, xs[2], xs[3], base, "r");
           descLines.forEach(function(ln, i){ page.drawText(clean(tf, ln), {x:xs[3] + PAD, y:base - i*LH, size:FS, font:tf, color:black}); });
           if (r.qtyTxt){
@@ -1031,6 +1118,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   $("btnCopy").onclick = copyTable;
   $("optSort").onchange = function(){ if (notes.length) build(); else savePrefs(); };
   $("optQty").onchange = function(){ if (notes.length) build(); else savePrefs(); };
+  $("optSplit").onchange = function(){ if (notes.length) build(); else savePrefs(); };
+  var regTimer;
+  ["regCodes","regWords","regSeco"].forEach(function(id){ $(id).addEventListener("input", function(){ clearTimeout(regTimer); regTimer = setTimeout(function(){ if (notes.length) build(); else savePrefs(); }, 400); }); });
+  $("regReset").onclick = function(){ $("regCodes").value = REG_DEFAULT.codes; $("regWords").value = REG_DEFAULT.words; $("regSeco").value = ""; if (notes.length) build(); else savePrefs(); };
 
   // arrastar e soltar (arquivos ou pastas) — aceita em qualquer lugar da página
   var drop = $("drop"), dragDepth = 0;
@@ -1077,6 +1168,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return Promise.all(entries.map(go)).then(function(){ return out; });
   }
 
+  if (!$("regCodes").value) $("regCodes").value = REG_DEFAULT.codes;
+  if (!$("regWords").value) $("regWords").value = REG_DEFAULT.words;
   loadPrefs(); setNow();
   link("optTitle", "vTitle", true);
   link("optTransp", "vTransp", false);
