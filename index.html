@@ -14,6 +14,15 @@
   .wrap{max-width:1180px;margin:0 auto;padding:20px 18px 60px}
   h1{font-size:20px;margin:0 0 4px}
   .sub{color:var(--muted);margin:0 0 16px}
+  body.mode-geral{--accent:#2a5d8f;--accent-soft:#e3ecf5}
+  .tabs{display:flex;gap:8px;margin:4px 0 0;border-bottom:2px solid var(--accent)}
+  .tab{appearance:none;border:1px solid var(--line);border-bottom:none;background:#e9ece9;color:var(--muted);padding:10px 18px 9px;border-radius:10px 10px 0 0;font:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;text-align:left;min-width:220px}
+  .tab b{font-size:16px}
+  .tab span{font-size:12.5px}
+  .tab:hover{background:#f4f6f4;color:var(--ink)}
+  .tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .tab.on span{color:rgba(255,255,255,.85)}
+  .tabhint{margin:10px 0 14px;font-size:14px;color:var(--ink);background:var(--accent-soft);border-left:4px solid var(--accent);padding:8px 12px;border-radius:0 8px 8px 0}
   .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
   .drop{border:2px dashed #a9b7ad;border-radius:10px;padding:22px;text-align:center;background:#fafcfa;transition:.15s}
   .drop.over{border-color:var(--accent);background:var(--accent-soft)}
@@ -87,6 +96,11 @@
 <div class="wrap">
   <h1>Relatório de Itens das NF-e</h1>
   <p class="sub">Selecione a pasta com os XMLs das notas. Os itens iguais são somados e os números das notas aparecem na coluna da esquerda. Os arquivos são lidos só no seu navegador; nada é enviado.</p>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-tab="nt" id="tabNt"><b>Nossa Terra</b><span>Congelado e Seco separados</span></button>
+    <button class="tab" role="tab" data-tab="geral" id="tabGeral"><b>Relatórios gerais</b><span>Todos os itens em uma lista só</span></button>
+  </div>
+  <p class="tabhint" id="tabHint"></p>
 
   <div class="panel">
     <div class="drop" id="drop">
@@ -127,12 +141,7 @@
           <option value="trib">Tributável (qTrib / uTrib)</option>
         </select>
       </label>
-      <label class="f">Separar por região
-        <select id="optSplit">
-          <option value="1">Congelado e Seco (separados)</option>
-          <option value="0">Não separar</option>
-        </select>
-      </label>
+      <input type="hidden" id="optSplit" value="1">
     </div>
     <details id="regBox" style="margin-top:12px">
       <summary>Configurar o que é CONGELADO (o resto vai para SECO)</summary>
@@ -245,14 +254,49 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (listOf($("regWords").value).some(function(w){ w = normTxt(w); return w && d.indexOf(w) >= 0; })) return "CONGELADO";
     return "SECO";
   }
+  // ---------- abas: cada uma tem suas próprias notas carregadas, título e transportadora ----------
+  var TAB = "nt", prefsCache = {}, store = {};
+  var TABS = {
+    nt:    {split:"1", title:"NOSSA TERRA X CENTRAL", hash:"nossa-terra",
+            hint:"<b>Nossa Terra:</b> os produtos saem divididos em <b>CONGELADO</b> e <b>SECO</b>, cada um com seu total, e o TOTAL GERAL no fim."},
+    geral: {split:"0", title:"CENTRAL", hash:"geral",
+            hint:"<b>Relatórios gerais:</b> todos os produtos saem em uma lista só, um embaixo do outro, com o TOTAL no fim."}
+  };
+  function saveState(){
+    store[TAB] = {loaded:loaded, cancelled:cancelled, seen:seen, skipped:skipped, duplicates:duplicates, curKey:curKey, search:$("itemSearch").value};
+  }
+  function tabPrefs(t){
+    var tp = prefsCache && prefsCache.tabs && prefsCache.tabs[t];
+    // compatibilidade com a versão anterior (um título só)
+    if (!tp && t === "geral" && prefsCache && prefsCache.title) tp = {title:prefsCache.title, transp:prefsCache.transp};
+    return tp || {};
+  }
+  function applyTab(t){
+    TAB = t;
+    var s = store[t] || {loaded:[], cancelled:{}, seen:{}, skipped:[], duplicates:0, curKey:"", search:""};
+    loaded = s.loaded; cancelled = s.cancelled; seen = s.seen; skipped = s.skipped; duplicates = s.duplicates;
+    curKey = s.curKey; curItem = -1; $("itemSearch").value = s.search || "";
+    $("optSplit").value = TABS[t].split;
+    var tp = tabPrefs(t);
+    $("optTitle").value = tp.title != null && tp.title !== "" ? tp.title : TABS[t].title;
+    $("optTransp").value = tp.transp || "";
+    ["optTitle","optTransp"].forEach(function(id){ $(id).dispatchEvent(new Event("input")); });
+    document.body.classList.toggle("mode-geral", t === "geral");
+    $("tabNt").classList.toggle("on", t === "nt"); $("tabGeral").classList.toggle("on", t === "geral");
+    $("tabNt").setAttribute("aria-selected", t === "nt"); $("tabGeral").setAttribute("aria-selected", t === "geral");
+    $("tabHint").innerHTML = TABS[t].hint + ' <span class="small">As notas carregadas em cada aba ficam separadas.</span>';
+    $("regBox").classList.toggle("hidden", t !== "nt");
+    try { if (location.hash !== "#" + TABS[t].hash) history.replaceState(null, "", "#" + TABS[t].hash); } catch(e){}
+    if (loaded.length) build(); else { notes = []; report = null; render(); setStatus(""); savePrefs(); }
+  }
+  function switchTab(t){ if (t === TAB) return; saveState(); applyTab(t); }
+  function tabFromHash(){ var hh = (location.hash || "").replace("#", ""); return hh === "geral" ? "geral" : hh === "nossa-terra" ? "nt" : null; }
   function loadPrefs(){
     try{
       var p = JSON.parse(localStorage.getItem("relxml-prefs") || "{}");
-      if (p.title) $("optTitle").value = p.title;
-      if (p.transp) $("optTransp").value = p.transp;
+      prefsCache = p;
       if (p.sort) $("optSort").value = p.sort;
       if (p.qty) $("optQty").value = p.qty;
-      if (p.split) $("optSplit").value = p.split;
       $("regCodes").value = p.regCodes != null ? p.regCodes : REG_DEFAULT.codes;
       $("regWords").value = p.regWords != null ? p.regWords : REG_DEFAULT.words;
       $("regSeco").value = p.regSeco != null ? p.regSeco : "";
@@ -260,10 +304,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
   function savePrefs(){
     try{
-      localStorage.setItem("relxml-prefs", JSON.stringify({
-        title:$("optTitle").value, transp:$("optTransp").value, sort:$("optSort").value, qty:$("optQty").value,
-        split:$("optSplit").value, regCodes:$("regCodes").value, regWords:$("regWords").value, regSeco:$("regSeco").value
-      }));
+      var tabs = (prefsCache && prefsCache.tabs) || {};
+      tabs[TAB] = {title:$("optTitle").value, transp:$("optTransp").value};
+      prefsCache = {tabs:tabs, lastTab:TAB, sort:$("optSort").value, qty:$("optQty").value,
+        regCodes:$("regCodes").value, regWords:$("regWords").value, regSeco:$("regSeco").value};
+      localStorage.setItem("relxml-prefs", JSON.stringify(prefsCache));
     }catch(e){}
   }
 
@@ -1118,7 +1163,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   $("btnCopy").onclick = copyTable;
   $("optSort").onchange = function(){ if (notes.length) build(); else savePrefs(); };
   $("optQty").onchange = function(){ if (notes.length) build(); else savePrefs(); };
-  $("optSplit").onchange = function(){ if (notes.length) build(); else savePrefs(); };
+  $("tabNt").onclick = function(){ switchTab("nt"); };
+  $("tabGeral").onclick = function(){ switchTab("geral"); };
+  window.addEventListener("hashchange", function(){ var t = tabFromHash(); if (t) switchTab(t); });
   var regTimer;
   ["regCodes","regWords","regSeco"].forEach(function(id){ $(id).addEventListener("input", function(){ clearTimeout(regTimer); regTimer = setTimeout(function(){ if (notes.length) build(); else savePrefs(); }, 400); }); });
   $("regReset").onclick = function(){ $("regCodes").value = REG_DEFAULT.codes; $("regWords").value = REG_DEFAULT.words; $("regSeco").value = ""; if (notes.length) build(); else savePrefs(); };
@@ -1175,7 +1222,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   link("optTransp", "vTransp", false);
   link("optDate", "vDate", false);
   link("optTime", "vTime", false);
-  render();
+  applyTab(tabFromHash() || (prefsCache.lastTab === "geral" ? "geral" : "nt"));
   getDownloads();
 })();
 </script>
