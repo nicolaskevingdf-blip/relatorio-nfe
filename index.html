@@ -60,6 +60,10 @@
   table.rep td.cod{text-align:right;width:80px;font-variant-numeric:tabular-nums}
   table.rep td.desc{white-space:normal}
   table.rep td.q{text-align:right;width:110px;font-variant-numeric:tabular-nums}
+  table.rep.pk2 td.nf:not(.uf),table.rep.pk3 td.nf:not(.uf),table.rep.pk4 td.nf:not(.uf){font-size:11.5px;white-space:pre;letter-spacing:-.1px}
+  table.rep.pk2 td.nf{width:110px}
+  table.rep.pk3 td.nf{width:160px}
+  table.rep.pk4 td.nf{width:210px}
   table.rep td.nflast{border-bottom:1px solid #444}
   table.rep td.nfc{font-weight:700;text-align:center;border-bottom:none}
   table.rep td.t{border-top:2px solid #333;font-weight:700;padding-top:6px}
@@ -370,11 +374,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     var byUf = {};
     notes.forEach(function(n){ (byUf[n.uf || "—"] = byUf[n.uf || "—"] || []).push(n.nNF); });
     var ufs = Object.keys(byUf).sort();
-    var nfCol = [];   // {text, uf:true/false}
-    ufs.forEach(function(u){
-      nfCol.push({text:u, uf:true});
-      byUf[u].sort(function(a,b){ return Number(a)-Number(b) || a.localeCompare(b); })
-        .forEach(function(nf){ nfCol.push({text:nf, uf:false}); });
+    var nfGroups = ufs.map(function(u){
+      return {uf:u, nums:byUf[u].sort(function(a,b){ return Number(a)-Number(b) || a.localeCompare(b); })};
     });
 
     var totals = {};
@@ -382,7 +383,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     var pesoB = r6(notes.reduce(function(a,n){ return a + n.pesoB; }, 0));
 
     curItem = curKey ? items.findIndex(function(i){ return i.cProd + "\u0001" + i.unit === curKey; }) : -1;
-    report = {items:items, nfCol:nfCol, ufs:ufs, mainUnit:mainUnit, totals:totals, pesoB:pesoB};
+    report = {items:items, nfGroups:nfGroups, ufs:ufs, mainUnit:mainUnit, totals:totals, pesoB:pesoB};
     render();
     savePrefs();
   }
@@ -398,13 +399,28 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function totalUnits(){
     return Object.keys(report.totals).sort(function(a,b){ return a === report.mainUnit ? -1 : b === report.mainUnit ? 1 : a.localeCompare(b); });
   }
+  // Coluna de NFs: quando há muitas notas, coloca 2, 3 ou 4 números por linha (em fonte menor)
+  // para a lista caber na mesma página dos produtos. Produtos não mudam.
+  var PAGE_ROWS = 38;   // linhas de produto que cabem com folga na 1ª página (PDF A4)
+  function nfLayout(){
+    var r = report, target = Math.max(r.items.length + totalUnits().length, PAGE_ROWS), k = 1;
+    var count = function(k){ return r.nfGroups.reduce(function(a,g){ return a + 1 + Math.ceil(g.nums.length / k); }, 0) + 1; };
+    while (k < 4 && count(k) > target) k++;
+    var lines = [];
+    r.nfGroups.forEach(function(g){
+      lines.push({text:g.uf, uf:true});
+      for (var i = 0; i < g.nums.length; i += k) lines.push({text:g.nums.slice(i, i+k).join("  "), uf:false, nums:g.nums.slice(i, i+k)});
+    });
+    return {lines:lines, k:k};
+  }
   function rows(){
-    var r = report, I = r.items.length, N = r.nfCol.length, units = totalUnits();
+    var lay = nfLayout(), nfCol = lay.lines;
+    var r = report, I = r.items.length, N = nfCol.length, units = totalUnits();
     var n = Math.max(I + units.length, N + 1), out = [];
     for (var k=0;k<n;k++){
-      var it = r.items[k], nf = r.nfCol[k], ti = k - I, u = units[ti];
+      var it = r.items[k], nf = nfCol[k], ti = k - I, u = units[ti];
       var row = {
-        nf: nf ? nf.text : (k === N ? notes.length + " nota(s)" : ""), nfIsUf: nf ? nf.uf : false,
+        nf: nf ? nf.text : (k === N ? notes.length + " nota(s)" : ""), nfIsUf: nf ? nf.uf : false, pack: lay.k,
         nfBox: k < N, nfLast: k === N - 1, nfCount: k === N,
         uf: k < r.ufs.length ? r.ufs[k] : "",
         item: it ? k : -1, cod: it ? it.cProd : "", desc: it ? it.xProd : "",
@@ -480,7 +496,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (!has){ $("repBody").innerHTML = '<div class="empty">Nenhum XML carregado ainda.</div>'; return; }
 
     var rs = rows();
-    var html = '<table class="rep"><thead><tr><th>NFs</th><th>UF</th><th class="q" style="text-align:right">CódProd</th><th>Descrição Produtos</th><th class="q">' + esc(qtyHeader()) + "</th></tr></thead><tbody>";
+    var html = '<table class="rep' + (rs.length && rs[0].pack > 1 ? " pk" + rs[0].pack : "") + '"><thead><tr><th>NFs</th><th>UF</th><th class="q" style="text-align:right">CódProd</th><th>Descrição Produtos</th><th class="q">' + esc(qtyHeader()) + "</th></tr></thead><tbody>";
     rs.forEach(function(r, i){
       var tc = r.tot ? (r.tot === 1 ? " t" : " t2") : "";
       html += "<tr" + (r.item >= 0 ? ' data-item="' + r.item + '" title="Clique para ver em quais notas este item aparece"' : "") + ">" +
@@ -733,7 +749,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (r.nfBox){
         var nfBorder = {l:"thin", r:"thin"}; if (r.nfLast) nfBorder.b = "thin";
         var nfv = (!r.nfIsUf && /^\d+$/.test(r.nf)) ? Number(r.nf) : r.nf;
-        set(row, 1, {v:nfv, s:{bold:r.nfIsUf, size:12, v:"top", h: r.nfIsUf ? "left" : "center", border:nfBorder}});
+        set(row, 1, {v:nfv, s:{bold:r.nfIsUf, size:(r.pack > 1 && !r.nfIsUf) ? [0,12,10,9,9][r.pack] : 12, v:"top", h: r.nfIsUf ? "left" : "center", border:nfBorder}});
       } else if (r.nfCount) set(row, 1, {v:r.nf, s:{bold:true, size:12, h:"center", v:"top"}});
       if (r.uf) set(row, 2, {v:r.uf, s:{bold:true, size:12, v:"top"}});
       if (r.tot === 1){
@@ -754,7 +770,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
     });
     var lastRow = HR + rs.length;
-    return {name:"Relatório", cols:[2, 18, 7, 10, 58, 15], rows:R, merges:["C2:E2","C3:D3","C4:D4","E3:F3"], heights:{3:26},
+    var pk = rs.length ? rs[0].pack : 1;
+    var maxLen = 0; rs.forEach(function(r){ if (r.nfBox && !r.nfIsUf) maxLen = Math.max(maxLen, r.nf.length); });
+    var bW = pk > 1 ? Math.max(18, Math.ceil(maxLen * 0.85) + 3) : 18;
+    return {name:"Relatório", cols:[2, bW, 7, 10, Math.max(44, 58 - (bW - 18)), 15], rows:R, merges:["C2:E2","C3:D3","C4:D4","E3:F3"], heights:{3:26},
       printArea:"B2:F" + lastRow, printTitles:String(HR)};
   }
 
@@ -862,7 +881,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return Promise.all([pdf.embedFont(L.StandardFonts.Helvetica), pdf.embedFont(L.StandardFonts.HelveticaBold)]).then(function(f){
         var F = f[0], B = f[1];
         var W = 595.28, H = 841.89, M = 36, black = L.rgb(0,0,0);
+        var pk = rs.length ? rs[0].pack : 1, NFS = [0, 9.5, 8.5, 7.5, 7][pk];
         var cols = [{w:62, a:"c"}, {w:34, a:"l"}, {w:54, a:"r"}, {w:0, a:"l"}, {w:92, a:"r"}];
+        if (pk > 1){
+          // coluna de NFs só do tamanho necessário; UF/código/quantidade cedem espaço para a descrição não encolher
+          var numW = 0;
+          rs.forEach(function(r){ if (r.nf && !r.nfIsUf && !r.nfCount) r.nf.split(/\s+/).forEach(function(nn){ numW = Math.max(numW, F.widthOfTextAtSize(nn, NFS)); }); });
+          cols[0].w = Math.max(62, Math.ceil(2*4 + pk*numW + (pk-1)*6));
+          cols[1].w = 26; cols[2].w = 46; cols[4].w = 80;
+        }
         cols[3].w = (W - 2*M) - cols.reduce(function(a,c){ return a + c.w; }, 0);
         var xs = [M]; cols.forEach(function(c, i){ xs[i+1] = xs[i] + c.w; });
         var FS = 9.5, LH = 11.5, PAD = 4;
@@ -929,7 +956,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             newPage(false);
           }
           var top = y, base = y - LH + 1 - (r.tot === 1 ? 3 : 0);
-          if (r.nf) text(page, (r.nfIsUf || r.nfCount) ? B : F, r.nf, FS, xs[0], xs[1], base, r.nfIsUf ? "l" : "c");
+          if (r.nf){
+            if (r.nfIsUf || r.nfCount || pk === 1) text(page, (r.nfIsUf || r.nfCount) ? B : F, r.nf, FS, xs[0], xs[1], base, r.nfIsUf ? "l" : "c");
+            else {
+              // números lado a lado, alinhados em colunas dentro da célula
+              var cw = (xs[1] - xs[0] - 8) / pk;
+              r.nf.split(/\s+/).forEach(function(nn, j){
+                var s = clean(F, nn), w = tw(F, s, NFS);
+                page.drawText(s, {x:xs[0] + 4 + j*cw + (cw - w)/2, y:base, size:NFS, font:F, color:black});
+              });
+            }
+          }
           if (r.uf) text(page, B, r.uf, FS, xs[1], xs[2], base, "l");
           var tf = r.tot ? B : F;
           if (r.tot === 1) page.drawLine({start:{x:xs[2], y:top - 1}, end:{x:xs[5], y:top - 1}, thickness:1.2, color:black});
