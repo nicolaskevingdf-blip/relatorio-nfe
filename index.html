@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relatório de Itens das NF-e (XML)</title>
+<style>
+  :root{
+    --bg:#f4f5f2; --card:#fff; --ink:#1d2320; --muted:#68716c; --line:#d6dad6;
+    --accent:#1f6b45; --accent-soft:#e3efe7; --head:#b7cde0; --head-ink:#14263a; --warn:#9a5b00;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 18px 60px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 16px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+  .drop{border:2px dashed #a9b7ad;border-radius:10px;padding:22px;text-align:center;background:#fafcfa;transition:.15s}
+  .drop.over{border-color:var(--accent);background:var(--accent-soft)}
+  .drop p{margin:0 0 12px;color:var(--muted)}
+  .btn{appearance:none;border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 14px;border-radius:7px;font:inherit;font-weight:600;cursor:pointer}
+  .btn:hover{border-color:#9aa59e}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+  label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);font-weight:600}
+  label.f input,label.f select{font:inherit;color:var(--ink);padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:#fff}
+  .status{margin-top:12px;font-size:14px}
+  .status .ok{color:var(--accent);font-weight:600}
+  .status .warn{color:var(--warn)}
+  .alert{margin-top:10px;padding:8px 12px;border-radius:8px;background:#fff6e0;border:1px solid #f0d28a;color:#5c3d00}
+  details{margin-top:8px}
+  summary{cursor:pointer;color:var(--muted);font-size:13px}
+  .small{font-size:13px;color:var(--muted)}
+  table.notes{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px}
+  table.notes th,table.notes td{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left}
+  table.notes td.n{text-align:right}
+
+  /* ---------- relatório (parecido com a planilha) ---------- */
+  .sheet{background:#fff;border:1px solid var(--line);border-radius:4px;padding:26px 26px 30px;overflow-x:auto}
+  .rhead{display:grid;grid-template-columns:auto 1fr;gap:14px 40px;align-items:center;margin-bottom:22px}
+  .rmeta{display:grid;grid-template-columns:auto auto;gap:4px 18px;font-size:16px;align-items:center}
+  .rmeta b{text-align:right;letter-spacing:.3px}
+  .rmeta span{min-width:120px;text-align:center}
+  .rtitle{border:2px solid #222;padding:10px 16px;text-align:center;font-size:20px;font-weight:700;letter-spacing:.5px;min-height:48px;outline:none}
+  .rtitle:focus,.ed:focus{background:#fffbe6}
+  .ed{outline:none;border-bottom:1px dashed transparent;min-width:60px;display:inline-block}
+  .ed:hover{border-bottom-color:#bbb}
+  table.rep{border-collapse:collapse;width:100%;font-size:15px}
+  table.rep th{background:var(--head);color:var(--head-ink);text-align:left;padding:6px 8px;font-size:16px;border-bottom:1px solid #8ea6bc}
+  table.rep th.q{text-align:right}
+  table.rep td{padding:4px 8px;vertical-align:top;white-space:nowrap}
+  table.rep tr[data-item] td.cod,table.rep tr[data-item] td.desc,table.rep tr[data-item] td.q,table.rep tr[data-item] td.uf{border-bottom:1px solid #eceeec}
+  table.rep td.nf{border-right:1px solid #444;border-left:1px solid #444;text-align:center;width:90px;font-variant-numeric:tabular-nums}
+  table.rep td.nf.uf{font-weight:700;text-align:left}
+  table.rep td.uf{width:60px;font-weight:600}
+  table.rep td.cod{text-align:right;width:80px;font-variant-numeric:tabular-nums}
+  table.rep td.desc{white-space:normal}
+  table.rep td.q{text-align:right;width:110px;font-variant-numeric:tabular-nums}
+  table.rep td.nflast{border-bottom:1px solid #444}
+  table.rep td.nfc{font-weight:700;text-align:center;border-bottom:none}
+  table.rep td.t{border-top:2px solid #333;font-weight:700;padding-top:6px}
+  table.rep td.t2{font-weight:700;border-bottom:none}
+  table.rep tfoot td{border-top:2px solid #333;font-weight:700;padding-top:8px;border-bottom:none}
+  table.rep tbody tr[data-item]{cursor:pointer}
+  table.rep tbody tr[data-item]:hover td:not(.nf){background:#f1f6fb}
+  table.rep tbody tr.sel td:not(.nf){background:#fff3c4}
+  .itemhead{margin:14px 0 4px;font-weight:700}
+  table.notes tfoot td{font-weight:700;border-top:2px solid #333;border-bottom:none}
+  .empty{color:var(--muted);text-align:center;padding:40px 10px}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#1d2320;color:#fff;padding:9px 16px;border-radius:8px;font-size:14px;opacity:0;transition:.2s;pointer-events:none;max-width:90vw}
+  .toast.show{opacity:1}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Relatório de Itens das NF-e</h1>
+  <p class="sub">Selecione a pasta com os XMLs das notas. Os itens iguais são somados e os números das notas aparecem na coluna da esquerda. Os arquivos são lidos só no seu navegador; nada é enviado.</p>
+
+  <div class="panel">
+    <div class="drop" id="drop">
+      <p>Arraste os arquivos XML (ou a pasta) para cá, ou</p>
+      <div class="row" style="justify-content:center">
+        <button class="btn primary" id="btnFolder">Selecionar pasta</button>
+        <button class="btn" id="btnFiles">Selecionar arquivos XML</button>
+        <button class="btn" id="btnClear" disabled>Limpar</button>
+      </div>
+      <input type="file" id="inFolder" webkitdirectory directory multiple class="hidden">
+      <input type="file" id="inFiles" accept=".xml,text/xml,application/xml" multiple class="hidden">
+    </div>
+    <div class="status" id="status"></div>
+    <details id="notesBox" class="hidden">
+      <summary>Ver notas lidas</summary>
+      <div style="margin-top:8px"><button class="btn" id="btnNotesXlsx2">Baixar esta lista em Excel</button></div>
+      <div id="notesList"></div>
+    </details>
+  </div>
+
+  <div class="panel">
+    <div class="grid">
+      <label class="f">Título do relatório<input id="optTitle" value="CENTRAL"></label>
+      <label class="f">Transportadora<input id="optTransp" placeholder="(opcional)"></label>
+      <label class="f">Data<input id="optDate" placeholder="dd/mm/aaaa"></label>
+      <label class="f">Hora<input id="optTime" placeholder="hh:mm"></label>
+      <label class="f">Ordenar itens por
+        <select id="optSort">
+          <option value="order">Ordem em que aparecem nas notas</option>
+          <option value="desc">Descrição (A–Z)</option>
+          <option value="cod">Código do produto</option>
+          <option value="qty">Maior quantidade</option>
+        </select>
+      </label>
+      <label class="f">Quantidade usada
+        <select id="optQty">
+          <option value="com">Comercial (qCom / uCom)</option>
+          <option value="trib">Tributável (qTrib / uTrib)</option>
+        </select>
+      </label>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn primary" id="btnXlsx" disabled>Baixar Excel (.xlsx)</button>
+      <button class="btn" id="btnPdf" disabled>Baixar PDF</button>
+      <button class="btn" id="btnNotesXlsx" disabled>Baixar lista de notas (Excel)</button>
+      <button class="btn" id="btnCopy" disabled>Copiar para colar no Excel</button>
+      <span class="small">Dica: dá para clicar no título e nos campos do cabeçalho do relatório para editar direto.</span>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="itemBox">
+    <div class="row" style="align-items:flex-end">
+      <label class="f" style="flex:1;min-width:240px">Consultar item: em quais notas ele aparece
+        <input id="itemSearch" placeholder="Digite parte do nome ou o código para filtrar…">
+      </label>
+      <label class="f" style="flex:2;min-width:280px">&nbsp;
+        <select id="itemSel"></select>
+      </label>
+      <button class="btn" id="btnItemXlsx" disabled>Baixar consulta (Excel)</button>
+    </div>
+    <div id="itemList"></div>
+    <p class="small" style="margin:8px 0 0">Dica: clicar numa linha do relatório abaixo também abre a consulta desse item.</p>
+  </div>
+
+  <div class="sheet" id="sheet">
+    <div class="rhead">
+      <div class="rmeta">
+        <b>TRANSPORTADORA:</b><span class="ed" contenteditable="true" id="vTransp"></span>
+        <b>DATA:</b><span class="ed" contenteditable="true" id="vDate"></span>
+        <b>HORA:</b><span class="ed" contenteditable="true" id="vTime"></span>
+      </div>
+      <div class="rtitle" contenteditable="true" id="vTitle">CENTRAL</div>
+    </div>
+    <div id="repBody"><div class="empty">Nenhum XML carregado ainda.</div></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+
+  // ---------- estado ----------
+  var curItem = -1, curKey = "";
+  var loaded = [];         // todas as notas lidas
+  var cancelled = {};      // chave -> true (evento de cancelamento encontrado)
+  var notes = [];          // {key,nNF,serie,uf,emit,dest,dhEmi,vNF,pesoB,itens:[{cProd,xProd,uCom,qCom,uTrib,qTrib}]}
+  var seen = {};           // chave -> true
+  var skipped = [];        // {name, reason}
+  var duplicates = 0;
+  var report = null;       // resultado montado
+
+  // ---------- preferências (só neste navegador) ----------
+  function loadPrefs(){
+    try{
+      var p = JSON.parse(localStorage.getItem("relxml-prefs") || "{}");
+      if (p.title) $("optTitle").value = p.title;
+      if (p.transp) $("optTransp").value = p.transp;
+      if (p.sort) $("optSort").value = p.sort;
+      if (p.qty) $("optQty").value = p.qty;
+    }catch(e){}
+  }
+  function savePrefs(){
+    try{
+      localStorage.setItem("relxml-prefs", JSON.stringify({
+        title:$("optTitle").value, transp:$("optTransp").value, sort:$("optSort").value, qty:$("optQty").value
+      }));
+    }catch(e){}
+  }
+
+  function pad(n){ return (n<10?"0":"")+n; }
+  function setNow(){
+    var d = new Date();
+    $("optDate").value = pad(d.getDate())+"/"+pad(d.getMonth()+1)+"/"+d.getFullYear();
+    $("optTime").value = pad(d.getHours())+":"+pad(d.getMinutes());
+  }
+
+  // ---------- leitura dos XML ----------
+  function decode(buf){
+    var head = new TextDecoder("ascii").decode(new Uint8Array(buf.slice(0, 200)));
+    var m = /encoding=["']([^"']+)["']/i.exec(head);
+    var enc = m ? m[1].toLowerCase() : "utf-8";
+    try { return new TextDecoder(enc).decode(buf); } catch(e){ return new TextDecoder("utf-8").decode(buf); }
+  }
+  function first(el, tag){
+    if (!el) return null;
+    var l = el.getElementsByTagNameNS("*", tag);
+    if (!l.length) l = el.getElementsByTagName(tag);
+    return l.length ? l[0] : null;
+  }
+  function txt(el, tag){ var e = first(el, tag); return e ? e.textContent.trim() : ""; }
+  function num(s){ var v = parseFloat(String(s||"").replace(",", ".")); return isFinite(v) ? v : 0; }
+  function children(el, tag){
+    var out = [];
+    var l = el.getElementsByTagNameNS("*", tag);
+    for (var i=0;i<l.length;i++) out.push(l[i]);
+    return out;
+  }
+
+  function parseNFe(text, name){
+    var doc = new DOMParser().parseFromString(text, "application/xml");
+    if (doc.getElementsByTagName("parsererror").length) return {error:"XML inválido"};
+    var inf = first(doc, "infNFe");
+    if (!inf){
+      var ev = first(doc, "infEvento");
+      if (ev){
+        var tp = txt(ev, "tpEvento"), ch = txt(ev, "chNFe");
+        var ret = first(doc, "retEvento"), rs = ret ? txt(ret, "cStat") : "";
+        if ((tp === "110111" || tp === "110112") && ch){
+          if (rs && ["135","136","155"].indexOf(rs) < 0) return {error:"evento de cancelamento NÃO homologado (cStat " + rs + ")"};
+          return {cancel:ch};
+        }
+        return {error:"arquivo de evento (" + (tp === "110110" ? "carta de correção" : "evento " + tp) + "), não é nota"};
+      }
+      return {error:"não é um XML de NF-e"};
+    }
+    var ide = first(inf, "ide"), emit = first(inf, "emit"), dest = first(inf, "dest");
+    var key = (inf.getAttribute("Id") || "").replace(/^NFe/, "");
+    var uf = dest ? txt(dest, "UF") : "";
+    if (!uf && emit) uf = txt(emit, "UF");
+    var itens = children(inf, "det").map(function(det){
+      var p = first(det, "prod");
+      return {
+        cProd: txt(p, "cProd"), xProd: txt(p, "xProd"),
+        uCom: txt(p, "uCom").toUpperCase(), qCom: num(txt(p, "qCom")),
+        uTrib: txt(p, "uTrib").toUpperCase(), qTrib: num(txt(p, "qTrib")), vProd: num(txt(p, "vProd"))
+      };
+    });
+    var pesoB = 0;
+    children(inf, "vol").forEach(function(v){ pesoB += num(txt(v, "pesoB")); });
+    var tot = first(inf, "ICMSTot");
+    var prot = first(doc, "protNFe"), cStat = prot ? txt(prot, "cStat") : "";
+    var warn = [];
+    if (!prot) warn.push("sem protocolo de autorização (XML pode não ser a nota autorizada)");
+    else if (["100","150"].indexOf(cStat) < 0) warn.push("situação na SEFAZ: " + cStat + " " + txt(prot, "xMotivo"));
+    if (txt(ide, "tpNF") === "0") warn.push("nota de ENTRADA");
+    if (txt(ide, "finNFe") === "4") warn.push("nota de DEVOLUÇÃO");
+    if (txt(ide, "tpAmb") === "2") warn.push("emitida em HOMOLOGAÇÃO (teste, sem valor fiscal)");
+    return {
+      warn: warn, emitDoc: emit ? (txt(emit, "CNPJ") || txt(emit, "CPF")) : "", mod: txt(ide, "mod"),
+      key: key || name,
+      nNF: txt(ide, "nNF"), serie: txt(ide, "serie"),
+      dhEmi: txt(ide, "dhEmi") || txt(ide, "dEmi"),
+      emit: emit ? (txt(emit, "xFant") || txt(emit, "xNome")) : "",
+      dest: dest ? txt(dest, "xNome") : "",
+      uf: uf.toUpperCase(),
+      vNF: tot ? num(txt(tot, "vNF")) : 0,
+      pesoB: pesoB,
+      itens: itens
+    };
+  }
+
+  function addFiles(fileList){
+    var files = Array.prototype.filter.call(fileList, function(f){ return /\.xml$/i.test(f.name); });
+    var ignored = fileList.length - files.length;
+    if (!files.length){ toast(ignored ? "Nenhum arquivo .xml encontrado na seleção." : "Nada selecionado."); return; }
+    setStatus("Lendo " + files.length + " arquivo(s)…");
+    Promise.all(files.map(function(f){
+      return f.arrayBuffer().then(function(b){ return {name:f.name, text:decode(b)}; });
+    })).then(function(rs){
+      rs.forEach(function(r){
+        var n;
+        try { n = parseNFe(r.text, r.name); } catch(e){ n = {error:"erro ao ler"}; }
+        if (n.error){ skipped.push({name:r.name, reason:n.error}); return; }
+        if (n.cancel){ cancelled[n.cancel] = true; return; }
+        if (seen[n.key]){ duplicates++; return; }
+        seen[n.key] = true;
+        loaded.push(n);
+      });
+      build();
+    });
+  }
+
+  // ---------- montagem do relatório ----------
+  function r6(x){ return Math.round(x * 1e6) / 1e6; }
+  function r2(x){ return Math.round(x * 100) / 100; }
+  function build(){
+    notes = loaded.filter(function(n){ return !cancelled[n.key]; });
+    var useTrib = $("optQty").value === "trib";
+    var groups = {}, order = [];
+    notes.forEach(function(n){
+      n.itens.forEach(function(it){
+        var u = useTrib ? (it.uTrib || it.uCom) : it.uCom;
+        var q = useTrib ? it.qTrib : it.qCom;
+        var k = it.cProd + "\u0001" + u;
+        if (!groups[k]){ groups[k] = {cProd:it.cProd, xProd:it.xProd, unit:u, qty:0, nfs:{}, per:{}, perOrder:[]}; order.push(k); }
+        var pn = groups[k].per[n.key];
+        if (!pn){ pn = groups[k].per[n.key] = {note:n, qty:0, val:0}; groups[k].perOrder.push(n.key); }
+        pn.qty += q; pn.val += it.vProd;
+        groups[k].qty += q;
+        groups[k].nfs[n.nNF] = 1;
+      });
+    });
+    var items = order.map(function(k){ return groups[k]; });
+    // arredonda para evitar resíduos de ponto flutuante (ex.: 231,39800000000002)
+    items.forEach(function(i){ i.qty = r6(i.qty); i.perOrder.forEach(function(k){ var p = i.per[k]; p.qty = r6(p.qty); p.val = r2(p.val); }); });
+    // unidade mais comum = cabeçalho da coluna
+    var uCount = {};
+    items.forEach(function(i){ uCount[i.unit] = (uCount[i.unit]||0) + i.qty; });
+    var mainUnit = Object.keys(uCount).sort(function(a,b){ return uCount[b]-uCount[a]; })[0] || "";
+
+    var s = $("optSort").value;
+    var cmpCode = function(a,b){
+      var na = Number(a.cProd), nb = Number(b.cProd);
+      if (isFinite(na) && isFinite(nb) && a.cProd !== "" && b.cProd !== "") return na - nb;
+      return a.cProd.localeCompare(b.cProd, "pt-BR", {numeric:true});
+    };
+    if (s === "desc") items.sort(function(a,b){ return a.xProd.localeCompare(b.xProd, "pt-BR"); });
+    else if (s === "cod") items.sort(cmpCode);
+    else if (s === "qty") items.sort(function(a,b){ return b.qty - a.qty; });
+
+    // notas agrupadas por UF, em ordem numérica
+    var byUf = {};
+    notes.forEach(function(n){ (byUf[n.uf || "—"] = byUf[n.uf || "—"] || []).push(n.nNF); });
+    var ufs = Object.keys(byUf).sort();
+    var nfCol = [];   // {text, uf:true/false}
+    ufs.forEach(function(u){
+      nfCol.push({text:u, uf:true});
+      byUf[u].sort(function(a,b){ return Number(a)-Number(b) || a.localeCompare(b); })
+        .forEach(function(nf){ nfCol.push({text:nf, uf:false}); });
+    });
+
+    var totals = {};
+    items.forEach(function(i){ totals[i.unit] = r6((totals[i.unit]||0) + i.qty); });
+    var pesoB = r6(notes.reduce(function(a,n){ return a + n.pesoB; }, 0));
+
+    curItem = curKey ? items.findIndex(function(i){ return i.cProd + "\u0001" + i.unit === curKey; }) : -1;
+    report = {items:items, nfCol:nfCol, ufs:ufs, mainUnit:mainUnit, totals:totals, pesoB:pesoB};
+    render();
+    savePrefs();
+  }
+
+  function fmt(v){
+    return v.toLocaleString("pt-BR", {minimumFractionDigits:0, maximumFractionDigits:3});
+  }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function qtyText(i){ return fmt(i.qty) + (i.unit !== report.mainUnit && i.unit ? " " + i.unit : ""); }
+
+  // linhas da tabela (usado na tela, no Excel, no PDF e na cópia)
+  // O TOTAL fica logo abaixo do último produto; a contagem de notas fica logo abaixo da última NF.
+  function totalUnits(){
+    return Object.keys(report.totals).sort(function(a,b){ return a === report.mainUnit ? -1 : b === report.mainUnit ? 1 : a.localeCompare(b); });
+  }
+  function rows(){
+    var r = report, I = r.items.length, N = r.nfCol.length, units = totalUnits();
+    var n = Math.max(I + units.length, N + 1), out = [];
+    for (var k=0;k<n;k++){
+      var it = r.items[k], nf = r.nfCol[k], ti = k - I, u = units[ti];
+      var row = {
+        nf: nf ? nf.text : (k === N ? notes.length + " nota(s)" : ""), nfIsUf: nf ? nf.uf : false,
+        nfBox: k < N, nfLast: k === N - 1, nfCount: k === N,
+        uf: k < r.ufs.length ? r.ufs[k] : "",
+        item: it ? k : -1, cod: it ? it.cProd : "", desc: it ? it.xProd : "",
+        qty: it ? it.qty : null, qtyTxt: it ? qtyText(it) : "", unit: it ? it.unit : "",
+        tot: 0
+      };
+      if (!it && ti >= 0 && ti < units.length){
+        row.tot = ti === 0 ? 1 : 2;
+        row.desc = ti === 0 ? "TOTAL" : "TOTAL " + u;
+        row.qty = r.totals[u]; row.unit = u;
+        row.qtyTxt = fmt(r.totals[u]) + (u ? " " + u : "");
+      }
+      out.push(row);
+    }
+    return out;
+  }
+  function qtyHeader(){ return "QTDE" + (report && report.mainUnit ? " " + report.mainUnit : ""); }
+  function totalText(){
+    var t = report.totals, keys = Object.keys(t);
+    keys.sort(function(a,b){ return a === report.mainUnit ? -1 : b === report.mainUnit ? 1 : a.localeCompare(b); });
+    return keys.map(function(u){ return fmt(t[u]) + (u ? " " + u : ""); }).join(" + ");
+  }
+
+  function render(){
+    var has = notes.length > 0;
+    ["btnXlsx","btnPdf","btnNotesXlsx","btnCopy","btnClear","btnItemXlsx"].forEach(function(id){ $(id).disabled = !has; });
+
+    // status
+    var st = "";
+    if (has){
+      st += '<span class="ok">' + notes.length + " nota(s) no relatório</span> · " + report.items.length + " produto(s) diferente(s)";
+    }
+    var nCanc = loaded.length - notes.length;
+    if (nCanc) st += ' · <span class="warn">' + nCanc + " nota(s) cancelada(s) retirada(s) do relatório</span>" +
+      '<details><summary>Ver canceladas</summary><div class="small">' + loaded.filter(function(n){ return cancelled[n.key]; })
+        .map(function(n){ return "NF " + esc(n.nNF) + " — " + esc(n.dest); }).join("<br>") + "</div></details>";
+    var warned = notes.filter(function(n){ return n.warn.length; });
+    var emits = {}; notes.forEach(function(n){ emits[n.emitDoc + "|" + n.emit] = 1; });
+    var nEmit = Object.keys(emits).length;
+    if (warned.length || nEmit > 1){
+      st += '<div class="alert"><b>Atenção:</b> ';
+      if (warned.length) st += warned.length + " nota(s) precisam de conferência (continuam somadas no relatório).";
+      if (nEmit > 1) st += (warned.length ? " " : "") + "As notas são de " + nEmit + " emitentes diferentes — produtos de emitentes diferentes com o mesmo código são somados juntos.";
+      if (warned.length){
+        var byW = {}, wo = [];
+        warned.forEach(function(n){ n.warn.forEach(function(w){ if (!byW[w]){ byW[w] = []; wo.push(w); } byW[w].push(n.nNF); }); });
+        st += '<div class="small" style="margin-top:4px">' + wo.map(function(w){
+          var l = byW[w]; return "<b>" + esc(w.charAt(0).toUpperCase() + w.slice(1)) + "</b> — " + (l.length === notes.length && l.length > 3 ? "todas as notas" : "NF " + esc(l.join(", ")));
+        }).join("<br>") + "</div>";
+      }
+      st += "</div>";
+    }
+    if (duplicates) st += ' · <span class="warn">' + duplicates + " XML repetido(s) ignorado(s)</span>";
+    if (skipped.length){
+      st += ' · <span class="warn">' + skipped.length + " arquivo(s) ignorado(s)</span>";
+      st += '<details><summary>Ver arquivos ignorados</summary><div class="small">' +
+        skipped.map(function(s){ return esc(s.name) + " — " + esc(s.reason); }).join("<br>") + "</div></details>";
+    }
+    setStatus(st);
+
+    $("notesBox").classList.toggle("hidden", !has);
+    if (has){
+      var sorted = notes.slice().sort(function(a,b){ return Number(a.nNF)-Number(b.nNF); });
+      $("notesList").innerHTML = '<table class="notes"><thead><tr><th>NF</th><th>Série</th><th>Emissão</th><th>Destinatário</th><th>UF</th><th>Itens</th><th style="text-align:right">Valor</th></tr></thead><tbody>' +
+        sorted.map(function(n){
+          var d = n.dhEmi ? n.dhEmi.slice(0,10).split("-").reverse().join("/") : "";
+          return "<tr><td>"+esc(n.nNF)+"</td><td>"+esc(n.serie)+"</td><td>"+d+"</td><td>"+esc(n.dest)+"</td><td>"+esc(n.uf)+"</td><td>"+n.itens.length+
+            '</td><td class="n">'+n.vNF.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+"</td></tr>";
+        }).join("") + "</tbody></table>";
+    }
+
+    $("itemBox").classList.toggle("hidden", !has);
+    if (!has){ $("repBody").innerHTML = '<div class="empty">Nenhum XML carregado ainda.</div>'; return; }
+
+    var rs = rows();
+    var html = '<table class="rep"><thead><tr><th>NFs</th><th>UF</th><th class="q" style="text-align:right">CódProd</th><th>Descrição Produtos</th><th class="q">' + esc(qtyHeader()) + "</th></tr></thead><tbody>";
+    rs.forEach(function(r, i){
+      var tc = r.tot ? (r.tot === 1 ? " t" : " t2") : "";
+      html += "<tr" + (r.item >= 0 ? ' data-item="' + r.item + '" title="Clique para ver em quais notas este item aparece"' : "") + ">" +
+        '<td class="' + (r.nfBox ? "nf" : "nfc") + (r.nfIsUf ? " uf" : "") + (r.nfLast ? " nflast" : "") + '">' + esc(r.nf) + "</td>" +
+        '<td class="uf">' + esc(r.uf) + "</td>" +
+        '<td class="cod' + tc + '">' + esc(r.cod) + "</td>" +
+        '<td class="desc' + tc + '">' + esc(r.desc) +
+          (r.tot === 1 && report.pesoB ? ' <span class="small" style="font-weight:400">(peso bruto nas notas: ' + fmt(report.pesoB) + " kg)</span>" : "") + "</td>" +
+        '<td class="q' + tc + '">' + esc(r.qtyTxt) + "</td></tr>";
+    });
+    html += "</tbody></table>";
+    $("repBody").innerHTML = html;
+    renderItemPicker();
+  }
+
+
+  // ---------- consulta por item ----------
+
+  function itemLabel(it){ return it.cProd + " — " + it.xProd + (it.unit ? " (" + it.unit + ")" : ""); }
+  function renderItemPicker(){
+    if (!report) return;
+    var f = $("itemSearch").value.trim().toLowerCase();
+    var norm = function(s){ return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase(); };
+    var nf = norm(f);
+    var list = report.items.map(function(it, i){ return {it:it, i:i}; })
+      .filter(function(o){ return !nf || norm(o.it.xProd).indexOf(nf) >= 0 || o.it.cProd.toLowerCase().indexOf(nf) >= 0; })
+      .sort(function(a,b){ return a.it.xProd.localeCompare(b.it.xProd, "pt-BR"); });
+    if (curItem >= report.items.length) curItem = -1;
+    var sel = $("itemSel");
+    sel.innerHTML = '<option value="-1">' + (list.length ? "— escolha um item (" + list.length + ") —" : "nenhum item encontrado") + "</option>" +
+      list.map(function(o){ return '<option value="' + o.i + '"' + (o.i === curItem ? " selected" : "") + ">" + esc(itemLabel(o.it)) + "</option>"; }).join("");
+    renderItemList();
+  }
+  function itemLines(i){
+    var it = report.items[i];
+    return it.perOrder.map(function(k){ return it.per[k]; })
+      .sort(function(a,b){ return (Number(a.note.nNF) - Number(b.note.nNF)) || a.note.nNF.localeCompare(b.note.nNF); });
+  }
+  function brl(v){ return v.toLocaleString("pt-BR", {style:"currency", currency:"BRL"}); }
+  function dBR(iso){ return iso ? iso.slice(0,10).split("-").reverse().join("/") : ""; }
+  function renderItemList(){
+    $("btnItemXlsx").disabled = !(report && curItem >= 0);
+    Array.prototype.forEach.call(document.querySelectorAll("table.rep tr.sel"), function(tr){ tr.classList.remove("sel"); });
+    if (!report || curItem < 0){ $("itemList").innerHTML = ""; return; }
+    var tr = document.querySelector('table.rep tr[data-item="' + curItem + '"]'); if (tr) tr.classList.add("sel");
+    var it = report.items[curItem], ls = itemLines(curItem);
+    var tq = ls.reduce(function(a,l){ return a + l.qty; }, 0), tv = ls.reduce(function(a,l){ return a + l.val; }, 0);
+    $("itemList").innerHTML = '<div class="itemhead">' + esc(itemLabel(it)) + " — " + ls.length + " nota(s), total " + esc(fmt(tq)) + " " + esc(it.unit) + "</div>" +
+      '<table class="notes"><thead><tr><th>NF</th><th>Série</th><th>Emissão</th><th>Destinatário</th><th>UF</th><th style="text-align:right">Qtde ' + esc(it.unit) + '</th><th style="text-align:right">Valor do item</th></tr></thead><tbody>' +
+      ls.map(function(l){ var n = l.note;
+        return "<tr><td>" + esc(n.nNF) + "</td><td>" + esc(n.serie) + "</td><td>" + dBR(n.dhEmi) + "</td><td>" + esc(n.dest) + "</td><td>" + esc(n.uf) +
+          '</td><td class="n">' + esc(fmt(l.qty)) + '</td><td class="n">' + brl(l.val) + "</td></tr>";
+      }).join("") +
+      '</tbody><tfoot><tr><td colspan="5">TOTAL — ' + ls.length + ' nota(s)</td><td class="n">' + esc(fmt(tq)) + '</td><td class="n">' + brl(tv) + "</td></tr></tfoot></table>";
+  }
+  function pickItem(i, scroll){
+    curItem = i; curKey = i >= 0 ? report.items[i].cProd + "\u0001" + report.items[i].unit : "";
+    if (i >= 0 && !Array.prototype.some.call($("itemSel").options, function(o){ return Number(o.value) === i; })){ $("itemSearch").value = ""; renderItemPicker(); }
+    $("itemSel").value = String(i);
+    renderItemList();
+    if (scroll && i >= 0) $("itemBox").scrollIntoView({behavior:"smooth", block:"start"});
+  }
+  $("itemSearch").addEventListener("input", function(){
+    renderItemPicker();
+    var opts = $("itemSel").options;
+    if (opts.length === 2) pickItem(Number(opts[1].value), false);   // só um resultado: já mostra
+  });
+  $("itemSel").addEventListener("change", function(){ pickItem(Number(this.value), false); });
+  $("repBody").addEventListener("click", function(e){
+    var tr = e.target.closest && e.target.closest("tr[data-item]");
+    if (tr && !(window.getSelection && String(window.getSelection()).length)) pickItem(Number(tr.getAttribute("data-item")), true);
+  });
+
+  // ---------- cabeçalho editável (sincroniza campos ↔ relatório) ----------
+  function link(inputId, viewId, upper){
+    var inp = $(inputId), view = $(viewId);
+    var fromInput = function(){ view.textContent = upper ? inp.value.toUpperCase() : inp.value; };
+    inp.addEventListener("input", function(){ fromInput(); savePrefs(); });
+    view.addEventListener("input", function(){ inp.value = view.textContent; savePrefs(); });
+    view.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); view.blur(); } });
+    fromInput();
+  }
+  function header(){
+    return {
+      title: $("vTitle").textContent.trim(), transp: $("vTransp").textContent.trim(),
+      date: $("vDate").textContent.trim(), time: $("vTime").textContent.trim()
+    };
+  }
+  function fileBase(){
+    var h = header();
+    var t = (h.title || "Relatorio").replace(/[\\/:*?"<>|]+/g, " ").trim();
+    return "Relatorio " + t + " " + h.date.replace(/\//g, "-");
+  }
+
+  // ---------- exportações ----------
+  // Bibliotecas ficam junto da página (lib/), sem depender de internet externa.
+  var libs = {};
+  function loadScript(src){
+    if (libs[src]) return libs[src];
+    libs[src] = new Promise(function(res, rej){
+      var s = document.createElement("script"); s.src = src; s.onload = res;
+      s.onerror = function(){ delete libs[src]; rej(new Error("Não foi possível carregar " + src)); };
+      document.head.appendChild(s);
+    });
+    return libs[src];
+  }
+  var dl = null;
+  function getDownloads(){
+    if (dl) return Promise.resolve(dl);
+    if (!window.claude || !window.claude.use) return Promise.resolve(null);
+    return window.claude.use("downloads").then(function(d){ dl = d; return d; }).catch(function(){ return null; });
+  }
+  function save(filename, blob){
+    window.__lastExport = {filename:filename, blob:blob};   // usado nos testes
+    return getDownloads().then(function(d){
+      if (d) return d.save({filename:filename, data:blob}).then(function(){ toast("Arquivo salvo."); })
+        .catch(function(e){ if (!e || e.code !== "declined") toast("Não foi possível salvar o arquivo aqui (" + (e && e.code || "erro") + ")."); });
+      // fora do Claude (página aberta como arquivo no computador): download normal
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+    });
+  }
+  function busy(btn, label, fn){
+    var old = btn.textContent; btn.disabled = true; btn.textContent = "Gerando…";
+    return Promise.resolve().then(fn).catch(function(e){ console.error(e); toast((e && e.message) || ("Erro ao gerar " + label)); })
+      .then(function(){ btn.disabled = false; btn.textContent = old; });
+  }
+
+  // ===== gerador de .xlsx (Office Open XML) =====
+  function colL(i){ var s = ""; i++; while (i > 0){ var m = (i-1) % 26; s = String.fromCharCode(65+m) + s; i = Math.floor((i-1)/26); } return s; }
+  function xe(s){ return String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function qtyFmt(v){ return Math.abs(v - Math.round(v)) < 1e-9 ? "#,##0" : "#,##0.0##"; }
+  function excelDate(iso){
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ""); if (!m) return null;
+    return (Date.UTC(+m[1], +m[2]-1, +m[3]) - Date.UTC(1899, 11, 30)) / 86400000;
+  }
+
+  // sheets: [{name, cols:[larguras], rows:[[cell|null]], merges:[], heights:{linha:altura}, freeze:true, autoFilter:"A1:J9", printArea:"B2:F9", landscape:false, gridlines:true}]
+  // cell: valor simples ou {v, f (fórmula), s:{bold,size,color,fill,h,v,wrap,border:{l,r,t,b},fmt}}
+  function buildXlsx(sheets){
+    var fonts = ['<font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/></font>'];
+    var fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'];
+    var borders = ['<border><left/><right/><top/><bottom/><diagonal/></border>'];
+    var numFmts = [], xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'];
+    var cache = {}, idx = function(arr, x){ var i = arr.indexOf(x); if (i < 0){ arr.push(x); i = arr.length - 1; } return i; };
+    function style(s){
+      if (!s) return 0;
+      var key = JSON.stringify(s); if (cache[key] !== undefined) return cache[key];
+      var f = idx(fonts, "<font>" + (s.bold ? "<b/>" : "") + '<sz val="' + (s.size || 11) + '"/><color rgb="' + (s.color || "FF000000") + '"/><name val="Calibri"/><family val="2"/></font>');
+      var fi = s.fill ? idx(fills, '<fill><patternFill patternType="solid"><fgColor rgb="' + s.fill + '"/><bgColor indexed="64"/></patternFill></fill>') : 0;
+      var b = s.border || {}, side = function(n, k){ return b[k] ? "<" + n + ' style="' + b[k] + '"><color rgb="FF404040"/></' + n + ">" : "<" + n + "/>"; };
+      var bi = s.border ? idx(borders, "<border>" + side("left","l") + side("right","r") + side("top","t") + side("bottom","b") + "<diagonal/></border>") : 0;
+      var nf = 0;
+      if (s.fmt){
+        var j = numFmts.indexOf(s.fmt); if (j < 0){ numFmts.push(s.fmt); j = numFmts.length - 1; }
+        nf = 164 + j;
+      }
+      var al = (s.h || s.v || s.wrap) ? "<alignment" + (s.h ? ' horizontal="' + s.h + '"' : "") + (s.v ? ' vertical="' + s.v + '"' : "") + (s.wrap ? ' wrapText="1"' : "") + "/>" : "";
+      xfs.push('<xf numFmtId="' + nf + '" fontId="' + f + '" fillId="' + fi + '" borderId="' + bi + '" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">' + al + "</xf>");
+      return (cache[key] = xfs.length - 1);
+    }
+
+    var wsXml = sheets.map(function(sh){
+      var x = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
+      x += '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>';
+      x += '<sheetViews><sheetView workbookViewId="0"' + (sh.gridlines === false ? ' showGridLines="0"' : "") + ">" +
+        (sh.freeze ? '<pane ySplit="' + sh.freeze + '" topLeftCell="A' + (sh.freeze+1) + '" activePane="bottomLeft" state="frozen"/>' : "") + "</sheetView></sheetViews>";
+      x += '<sheetFormatPr defaultRowHeight="15"/><cols>' + sh.cols.map(function(w, i){ return '<col min="' + (i+1) + '" max="' + (i+1) + '" width="' + w + '" customWidth="1"/>'; }).join("") + "</cols><sheetData>";
+      sh.rows.forEach(function(row, r){
+        if (!row) return;
+        var h = sh.heights && sh.heights[r+1];
+        x += '<row r="' + (r+1) + '"' + (h ? ' ht="' + h + '" customHeight="1"' : "") + ">";
+        row.forEach(function(c, ci){
+          if (c === null || c === undefined) return;
+          if (typeof c !== "object") c = {v:c};
+          var ref = colL(ci) + (r+1), s = style(c.s), sa = s ? ' s="' + s + '"' : "";
+          if (c.f) x += "<c r=\"" + ref + "\"" + sa + "><f>" + xe(c.f) + "</f>" + (typeof c.v === "number" ? "<v>" + c.v + "</v>" : "") + "</c>";
+          else if (typeof c.v === "number" && isFinite(c.v)) x += '<c r="' + ref + '"' + sa + "><v>" + c.v + "</v></c>";
+          else if (c.v === "" || c.v === undefined || c.v === null) x += '<c r="' + ref + '"' + sa + "/>";
+          else x += '<c r="' + ref + '"' + sa + ' t="inlineStr"><is><t xml:space="preserve">' + xe(c.v) + "</t></is></c>";
+        });
+        x += "</row>";
+      });
+      x += "</sheetData>";
+      if (sh.autoFilter) x += '<autoFilter ref="' + sh.autoFilter + '"/>';
+      if (sh.merges && sh.merges.length) x += '<mergeCells count="' + sh.merges.length + '">' + sh.merges.map(function(m){ return '<mergeCell ref="' + m + '"/>'; }).join("") + "</mergeCells>";
+      x += '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>';
+      x += '<pageSetup paperSize="9" orientation="' + (sh.landscape ? "landscape" : "portrait") + '" fitToWidth="1" fitToHeight="0"/>';
+      x += "</worksheet>";
+      return x;
+    });
+
+    var stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      (numFmts.length ? '<numFmts count="' + numFmts.length + '">' + numFmts.map(function(f, i){ return '<numFmt numFmtId="' + (164+i) + '" formatCode="' + xe(f) + '"/>'; }).join("") + "</numFmts>" : "") +
+      '<fonts count="' + fonts.length + '">' + fonts.join("") + "</fonts>" +
+      '<fills count="' + fills.length + '">' + fills.join("") + "</fills>" +
+      '<borders count="' + borders.length + '">' + borders.join("") + "</borders>" +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="' + xfs.length + '">' + xfs.join("") + "</cellXfs>" +
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+
+    var q = function(n){ return "'" + n.replace(/'/g, "''") + "'"; };
+    var defs = [];
+    sheets.forEach(function(sh, i){
+      if (sh.autoFilter) defs.push('<definedName name="_xlnm._FilterDatabase" localSheetId="' + i + '" hidden="1">' + xe(q(sh.name) + "!" + sh.autoFilter.replace(/([A-Z]+)(\d+)/g, "$$$1$$$2")) + "</definedName>");
+      if (sh.printArea) defs.push('<definedName name="_xlnm.Print_Area" localSheetId="' + i + '">' + xe(q(sh.name) + "!" + sh.printArea.replace(/([A-Z]+)(\d+)/g, "$$$1$$$2")) + "</definedName>");
+      if (sh.printTitles) defs.push('<definedName name="_xlnm.Print_Titles" localSheetId="' + i + '">' + xe(q(sh.name) + "!$" + sh.printTitles + ":$" + sh.printTitles) + "</definedName>");
+    });
+    var wb = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets>' +
+      sheets.map(function(sh, i){ return '<sheet name="' + xe(sh.name) + '" sheetId="' + (i+1) + '" r:id="rId' + (i+1) + '"/>'; }).join("") + "</sheets>" +
+      (defs.length ? "<definedNames>" + defs.join("") + "</definedNames>" : "") + '<calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>';
+    var wbRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      sheets.map(function(sh, i){ return '<Relationship Id="rId' + (i+1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i+1) + '.xml"/>'; }).join("") +
+      '<Relationship Id="rId' + (sheets.length+1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+    var ct = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      sheets.map(function(sh, i){ return '<Override PartName="/xl/worksheets/sheet' + (i+1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'; }).join("") +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
+    var rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+
+    var zip = new JSZip();
+    zip.file("[Content_Types].xml", ct);
+    zip.file("_rels/.rels", rels);
+    zip.file("xl/workbook.xml", wb);
+    zip.file("xl/_rels/workbook.xml.rels", wbRels);
+    zip.file("xl/styles.xml", stylesXml);
+    wsXml.forEach(function(x, i){ zip.file("xl/worksheets/sheet" + (i+1) + ".xml", x); });
+    return zip.generateAsync({type:"blob", compression:"DEFLATE", mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  }
+
+  // planilha do relatório (layout igual à OrdCarreg)
+  function reportSheet(){
+    var h = header(), rs = rows(), R = [];
+    var set = function(r, c, v){ (R[r-1] = R[r-1] || [])[c] = v; };
+    set(2, 1, {v:"TRANSPORTADORA:", s:{bold:true, size:12, h:"right"}}); set(2, 2, {v:h.transp, s:{size:12}});
+    set(3, 1, {v:"DATA:", s:{bold:true, size:12, h:"right"}});           set(3, 2, {v:h.date, s:{size:12, h:"center"}});
+    set(4, 1, {v:"HORA:", s:{bold:true, size:12, h:"right"}});           set(4, 2, {v:h.time, s:{size:12, h:"center"}});
+    set(3, 4, {v:h.title, s:{bold:true, size:14, h:"center", v:"center", border:{l:"medium", t:"medium", b:"medium"}}});
+    set(3, 5, {v:"", s:{border:{r:"medium", t:"medium", b:"medium"}}});
+    var HR = 6;
+    var hs = function(right){ return {bold:true, size:12, color:"FF14263A", fill:"FFB7CDE0", h: right ? "right" : "left", border:{b:"thin"}}; };
+    ["NFs","UF","CódProd","Descrição Produtos", qtyHeader()].forEach(function(t, i){ set(HR, i+1, {v:t, s:hs(i === 2 || i === 4)}); });
+    var firstData = HR + 1, lastItemRow = HR + report.items.length;
+    rs.forEach(function(r, k){
+      var row = HR + 1 + k;
+      if (r.nfBox){
+        var nfBorder = {l:"thin", r:"thin"}; if (r.nfLast) nfBorder.b = "thin";
+        var nfv = (!r.nfIsUf && /^\d+$/.test(r.nf)) ? Number(r.nf) : r.nf;
+        set(row, 1, {v:nfv, s:{bold:r.nfIsUf, size:12, v:"top", h: r.nfIsUf ? "left" : "center", border:nfBorder}});
+      } else if (r.nfCount) set(row, 1, {v:r.nf, s:{bold:true, size:12, h:"center", v:"top"}});
+      if (r.uf) set(row, 2, {v:r.uf, s:{bold:true, size:12, v:"top"}});
+      if (r.tot === 1){
+        var tb = {bold:true, size:12, border:{t:"medium"}};
+        set(row, 3, {v:"", s:tb});
+        set(row, 4, {v:r.desc, s:tb});
+        if (r.unit === report.mainUnit)   // SOMA só dos números (unidade principal)
+          set(row, 5, {f:"SUM(F" + firstData + ":F" + lastItemRow + ")", v:r.qty, s:{bold:true, size:12, h:"right", border:{t:"medium"}, fmt:qtyFmt(r.qty)}});
+        else set(row, 5, {v:r.qtyTxt, s:{bold:true, size:12, h:"right", border:{t:"medium"}}});
+      } else if (r.tot === 2){
+        set(row, 4, {v:r.desc, s:{bold:true, size:12}});
+        set(row, 5, {v:r.qtyTxt, s:{bold:true, size:12, h:"right"}});
+      } else if (r.item >= 0){
+        set(row, 3, {v:/^\d+$/.test(r.cod) ? Number(r.cod) : r.cod, s:{size:12, h:"right", v:"top"}});
+        set(row, 4, {v:r.desc, s:{size:12, wrap:true, v:"top"}});
+        if (r.unit === report.mainUnit || !r.unit) set(row, 5, {v:r.qty, s:{size:12, h:"right", v:"top", fmt:qtyFmt(r.qty)}});
+        else set(row, 5, {v:r.qtyTxt, s:{size:12, h:"right", v:"top"}});
+      }
+    });
+    var lastRow = HR + rs.length;
+    return {name:"Relatório", cols:[2, 18, 7, 10, 58, 15], rows:R, merges:["C2:E2","C3:D3","C4:D4","E3:F3"], heights:{3:26},
+      printArea:"B2:F" + lastRow, printTitles:String(HR)};
+  }
+
+  // planilha com a lista de notas
+  function notesSheet(){
+    var R = [], sorted = notes.slice().sort(function(a,b){ return (Number(a.nNF) - Number(b.nNF)) || a.nNF.localeCompare(b.nNF); });
+    var hs = {bold:true, color:"FF14263A", fill:"FFB7CDE0", border:{b:"thin"}};
+    var hsR = {bold:true, color:"FF14263A", fill:"FFB7CDE0", border:{b:"thin"}, h:"right"};
+    R.push([{v:"NF", s:hsR}, {v:"Série", s:hsR}, {v:"Emissão", s:hs}, {v:"Destinatário", s:hs}, {v:"UF", s:hs}, {v:"Itens", s:hsR},
+      {v:"Valor", s:hsR}, {v:"Peso bruto (kg)", s:hsR}, {v:"Emitente", s:hs}, {v:"Chave de acesso", s:hs}]);
+    sorted.forEach(function(n){
+      var d = excelDate(n.dhEmi);
+      R.push([
+        /^\d+$/.test(n.nNF) ? Number(n.nNF) : n.nNF,
+        /^\d+$/.test(n.serie) ? Number(n.serie) : n.serie,
+        d === null ? "" : {v:d, s:{fmt:"dd/mm/yyyy", h:"left"}},
+        n.dest, n.uf, n.itens.length,
+        {v:n.vNF, s:{fmt:'"R$" #,##0.00'}},
+        n.pesoB ? {v:n.pesoB, s:{fmt:"#,##0.0##"}} : "",
+        n.emit,
+        {v:n.key, s:{fmt:"@"}}
+      ]);
+    });
+    var last = R.length, t = {bold:true, border:{t:"medium"}};
+    var sumV = notes.reduce(function(a,n){ return a + n.vNF; }, 0);
+    var sumI = notes.reduce(function(a,n){ return a + n.itens.length; }, 0);
+    var sumP = notes.reduce(function(a,n){ return a + n.pesoB; }, 0);
+    R.push([{v:"TOTAL", s:t}, {v:"", s:t}, {v:"", s:t}, {v:notes.length + " nota(s)", s:t}, {v:"", s:t},
+      {f:"SUM(F2:F" + last + ")", v:sumI, s:t},
+      {f:"SUM(G2:G" + last + ")", v:Math.round(sumV*100)/100, s:{bold:true, border:{t:"medium"}, fmt:'"R$" #,##0.00'}},
+      {f:"SUM(H2:H" + last + ")", v:sumP, s:{bold:true, border:{t:"medium"}, fmt:"#,##0.0##"}},
+      {v:"", s:t}, {v:"", s:t}]);
+    return {name:"Notas", cols:[11, 7, 12, 50, 6, 7, 15, 15, 40, 48], rows:R, freeze:1, autoFilter:"A1:J" + last, landscape:true, printTitles:"1"};
+  }
+
+  function exportXlsx(){
+    return busy($("btnXlsx"), "o Excel", function(){
+      return loadScript("lib/jszip.min.js").then(function(){
+        return buildXlsx([reportSheet(), notesSheet(), linesSheet()]);
+      }).then(function(blob){ return save(fileBase() + ".xlsx", blob); });
+    });
+  }
+
+  function safeSheetName(s){ return s.replace(/[\[\]:*?\/\\]/g, " ").slice(0, 31).trim() || "Item"; }
+  function itemSheet(i){
+    var it = report.items[i], ls = itemLines(i), R = [];
+    var hs = {bold:true, color:"FF14263A", fill:"FFB7CDE0", border:{b:"thin"}}, hsR = {bold:true, color:"FF14263A", fill:"FFB7CDE0", border:{b:"thin"}, h:"right"};
+    R.push([{v:"Item: " + it.cProd + " — " + it.xProd + (it.unit ? " (" + it.unit + ")" : ""), s:{bold:true, size:13}}]);
+    R.push(null);
+    R.push([{v:"NF", s:hsR}, {v:"Série", s:hsR}, {v:"Emissão", s:hs}, {v:"Destinatário", s:hs}, {v:"UF", s:hs}, {v:"Qtde " + it.unit, s:hsR}, {v:"Valor do item", s:hsR}]);
+    ls.forEach(function(l){ var n = l.note, d = excelDate(n.dhEmi);
+      R.push([/^\d+$/.test(n.nNF) ? Number(n.nNF) : n.nNF, /^\d+$/.test(n.serie) ? Number(n.serie) : n.serie,
+        d === null ? "" : {v:d, s:{fmt:"dd/mm/yyyy", h:"left"}}, n.dest, n.uf,
+        {v:l.qty, s:{fmt:qtyFmt(l.qty)}}, {v:Math.round(l.val*100)/100, s:{fmt:'"R$" #,##0.00'}}]);
+    });
+    var first = 4, last = R.length, t = {bold:true, border:{t:"medium"}};
+    var tq = ls.reduce(function(a,l){ return a + l.qty; }, 0), tv = ls.reduce(function(a,l){ return a + l.val; }, 0);
+    R.push([{v:"TOTAL", s:t}, {v:"", s:t}, {v:"", s:t}, {v:ls.length + " nota(s)", s:t}, {v:"", s:t},
+      {f:"SUM(F" + first + ":F" + last + ")", v:tq, s:{bold:true, border:{t:"medium"}, fmt:qtyFmt(tq)}},
+      {f:"SUM(G" + first + ":G" + last + ")", v:Math.round(tv*100)/100, s:{bold:true, border:{t:"medium"}, fmt:'"R$" #,##0.00'}}]);
+    return {name:safeSheetName("Item " + it.cProd), cols:[11, 7, 12, 50, 6, 14, 15], rows:R, freeze:3, printTitles:"3"};
+  }
+  function linesSheet(){
+    var R = [], hs = {bold:true, color:"FF14263A", fill:"FFB7CDE0", border:{b:"thin"}}, hsR = {bold:true, color:"FF14263A", fill:"FFB7CDE0", border:{b:"thin"}, h:"right"};
+    R.push([{v:"NF", s:hsR}, {v:"Série", s:hsR}, {v:"Emissão", s:hs}, {v:"Destinatário", s:hs}, {v:"UF", s:hs}, {v:"CódProd", s:hsR}, {v:"Descrição", s:hs}, {v:"Qtde", s:hsR}, {v:"Unid", s:hs}, {v:"Valor do item", s:hsR}]);
+    var all = [];
+    report.items.forEach(function(it){ it.perOrder.forEach(function(k){ all.push({it:it, l:it.per[k]}); }); });
+    all.sort(function(a,b){ return (Number(a.l.note.nNF) - Number(b.l.note.nNF)) || a.it.xProd.localeCompare(b.it.xProd, "pt-BR"); });
+    all.forEach(function(o){ var n = o.l.note, d = excelDate(n.dhEmi);
+      R.push([/^\d+$/.test(n.nNF) ? Number(n.nNF) : n.nNF, /^\d+$/.test(n.serie) ? Number(n.serie) : n.serie,
+        d === null ? "" : {v:d, s:{fmt:"dd/mm/yyyy", h:"left"}}, n.dest, n.uf,
+        /^\d+$/.test(o.it.cProd) ? Number(o.it.cProd) : o.it.cProd, o.it.xProd,
+        {v:o.l.qty, s:{fmt:qtyFmt(o.l.qty)}}, o.it.unit, {v:Math.round(o.l.val*100)/100, s:{fmt:'"R$" #,##0.00'}}]);
+    });
+    return {name:"Itens por nota", cols:[11, 7, 12, 44, 6, 10, 46, 12, 6, 15], rows:R, freeze:1, autoFilter:"A1:J" + R.length, landscape:true, printTitles:"1"};
+  }
+  function exportItemXlsx(){
+    if (curItem < 0) return;
+    var it = report.items[curItem];
+    return busy($("btnItemXlsx"), "o Excel", function(){
+      return loadScript("lib/jszip.min.js").then(function(){ return buildXlsx([itemSheet(curItem)]); })
+        .then(function(blob){ return save(("Item " + it.cProd + " " + it.xProd).replace(/[\\/:*?"<>|]+/g, " ").slice(0, 80).trim() + ".xlsx", blob); });
+    });
+  }
+  function exportNotesXlsx(){
+    return busy($("btnNotesXlsx"), "o Excel", function(){
+      return loadScript("lib/jszip.min.js").then(function(){
+        return buildXlsx([notesSheet()]);
+      }).then(function(blob){ return save("Notas " + fileBase().replace(/^Relatorio /, "") + ".xlsx", blob); });
+    });
+  }
+
+  // ===== PDF (pdf-lib) =====
+  function exportPdf(){
+    return busy($("btnPdf"), "o PDF", function(){
+      return loadScript("lib/pdf-lib.min.js").then(buildPdf).then(function(bytes){
+        return save(fileBase() + ".pdf", new Blob([bytes], {type:"application/pdf"}));
+      });
+    });
+  }
+  function buildPdf(){
+    var L = window.PDFLib, h = header(), rs = rows();
+    return L.PDFDocument.create().then(function(pdf){
+      pdf.setTitle("Relatório " + (h.title || ""));
+      return Promise.all([pdf.embedFont(L.StandardFonts.Helvetica), pdf.embedFont(L.StandardFonts.HelveticaBold)]).then(function(f){
+        var F = f[0], B = f[1];
+        var W = 595.28, H = 841.89, M = 36, black = L.rgb(0,0,0);
+        var cols = [{w:62, a:"c"}, {w:34, a:"l"}, {w:54, a:"r"}, {w:0, a:"l"}, {w:92, a:"r"}];
+        cols[3].w = (W - 2*M) - cols.reduce(function(a,c){ return a + c.w; }, 0);
+        var xs = [M]; cols.forEach(function(c, i){ xs[i+1] = xs[i] + c.w; });
+        var FS = 9.5, LH = 11.5, PAD = 4;
+        // caracteres fora do padrão da fonte viram "?"
+        var clean = function(font, s){
+          s = String(s == null ? "" : s).replace(/≥/g, ">=").replace(/≤/g, "<=").replace(/[\u2010-\u2012]/g, "-").replace(/\u00A0/g, " ");
+          try { font.encodeText(s); return s; } catch(e){
+            return Array.prototype.map.call(s, function(ch){ try { font.encodeText(ch); return ch; } catch(_){ return "?"; } }).join("");
+          }
+        };
+        var tw = function(font, s, size){ return font.widthOfTextAtSize(s, size); };
+        var wrap = function(font, s, size, max){
+          s = clean(font, s); var words = s.split(/\s+/), out = [], cur = "";
+          words.forEach(function(w){
+            var t = cur ? cur + " " + w : w;
+            if (tw(font, t, size) <= max || !cur) cur = t; else { out.push(cur); cur = w; }
+          });
+          if (cur) out.push(cur);
+          return out.length ? out : [""];
+        };
+        var text = function(pg, font, s, size, x0, x1, y, align){
+          s = clean(font, s);
+          while (s.length > 1 && tw(font, s, size) > (x1 - x0) - 2*PAD) s = s.slice(0, -1);
+          var w = tw(font, s, size), x = align === "r" ? x1 - PAD - w : align === "c" ? (x0 + x1 - w)/2 : x0 + PAD;
+          pg.drawText(s, {x:x, y:y, size:size, font:font, color:black});
+        };
+        var pages = [], page, y;
+        var headBlue = L.rgb(183/255, 205/255, 224/255), headInk = L.rgb(20/255, 38/255, 58/255), grid = L.rgb(.88,.88,.88), dark = L.rgb(.25,.25,.25);
+        function tableHead(){
+          var hh = 18;
+          page.drawRectangle({x:M, y:y - hh, width:W - 2*M, height:hh, color:headBlue});
+          ["NFs","UF","CódProd","Descrição Produtos", qtyHeader()].forEach(function(t, i){
+            var s = clean(B, t), w = tw(B, s, 10.5), a = (i === 2 || i === 4) ? "r" : "l";
+            var x = a === "r" ? xs[i+1] - PAD - w : xs[i] + PAD;
+            page.drawText(s, {x:x, y:y - hh + 5.5, size:10.5, font:B, color:headInk});
+          });
+          y -= hh;
+        }
+        function newPage(first){
+          page = pdf.addPage([W, H]); pages.push(page); y = H - M;
+          if (first){
+            var lab = function(t, yy){ var s = clean(B, t); page.drawText(s, {x:M + 92 - tw(B, s, 11), y:yy, size:11, font:B}); };
+            lab("TRANSPORTADORA:", y - 12); lab("DATA:", y - 28); lab("HORA:", y - 44);
+            page.drawText(clean(F, h.transp), {x:M + 100, y:y - 12, size:11, font:F});
+            page.drawText(clean(F, h.date), {x:M + 100, y:y - 28, size:11, font:F});
+            page.drawText(clean(F, h.time), {x:M + 100, y:y - 44, size:11, font:F});
+            var bx = M + 250, bw = W - M - bx, by = y - 40, bh = 26;
+            page.drawRectangle({x:bx, y:by, width:bw, height:bh, borderColor:black, borderWidth:1.5});
+            var ts = clean(B, h.title), size = 14;
+            while (size > 8 && tw(B, ts, size) > bw - 12) size -= .5;
+            page.drawText(ts, {x:bx + (bw - tw(B, ts, size))/2, y:by + (bh - size*0.7)/2, size:size, font:B});
+            y -= 62;
+          }
+          tableHead();
+        }
+        newPage(true);
+        var BOTTOM = M + 20;
+        rs.forEach(function(r, k){
+          var descLines = r.tot ? [r.desc] : wrap(F, r.desc, FS, cols[3].w - 2*PAD);
+          var rh = Math.max(1, descLines.length) * LH + 5 + (r.tot === 1 ? 3 : 0);
+          if (y - rh < BOTTOM){
+            // fecha a coluna de NFs na quebra de página
+            if (r.nfBox) page.drawLine({start:{x:xs[0], y:y}, end:{x:xs[1], y:y}, thickness:.6, color:dark});
+            newPage(false);
+          }
+          var top = y, base = y - LH + 1 - (r.tot === 1 ? 3 : 0);
+          if (r.nf) text(page, (r.nfIsUf || r.nfCount) ? B : F, r.nf, FS, xs[0], xs[1], base, r.nfIsUf ? "l" : "c");
+          if (r.uf) text(page, B, r.uf, FS, xs[1], xs[2], base, "l");
+          var tf = r.tot ? B : F;
+          if (r.tot === 1) page.drawLine({start:{x:xs[2], y:top - 1}, end:{x:xs[5], y:top - 1}, thickness:1.2, color:black});
+          if (r.cod) text(page, F, r.cod, FS, xs[2], xs[3], base, "r");
+          descLines.forEach(function(ln, i){ page.drawText(clean(tf, ln), {x:xs[3] + PAD, y:base - i*LH, size:FS, font:tf, color:black}); });
+          if (r.qtyTxt){
+            var qs = clean(tf, r.qtyTxt), qw = tw(tf, qs, FS);
+            page.drawText(qs, {x:xs[5] - PAD - qw, y:base, size:FS, font:tf, color:black});
+          }
+          y -= rh;
+          if (r.item >= 0) page.drawLine({start:{x:xs[1], y:y}, end:{x:xs[5], y:y}, thickness:.4, color:grid});
+          if (r.nfBox){
+            page.drawLine({start:{x:xs[0], y:top}, end:{x:xs[0], y:y}, thickness:.6, color:dark});
+            page.drawLine({start:{x:xs[1], y:top}, end:{x:xs[1], y:y}, thickness:.6, color:dark});
+            if (r.nfLast) page.drawLine({start:{x:xs[0], y:y}, end:{x:xs[1], y:y}, thickness:.6, color:dark});
+          }
+        });
+        pages.forEach(function(p, i){
+          var s = "Página " + (i+1) + " de " + pages.length;
+          p.drawText(clean(F, s), {x:W - M - tw(F, clean(F, s), 8), y:M - 14, size:8, font:F, color:L.rgb(.45,.45,.45)});
+        });
+        return pdf.save();
+      });
+    });
+  }
+
+  function copyTable(){
+    var h = header();
+    var lines = ["TRANSPORTADORA:\t" + h.transp, "DATA:\t" + h.date, "HORA:\t" + h.time, "\t\t\t" + h.title, "",
+      ["NFs","UF","CódProd","Descrição Produtos", qtyHeader()].join("\t")];
+    rows().forEach(function(r){
+      var q = r.qty === null ? "" : ((r.unit === report.mainUnit && r.tot !== 2) ? fmt(r.qty).replace(/\./g, "") : r.qtyTxt);
+      lines.push([r.nf, r.uf, r.cod, r.desc, q].join("\t"));
+    });
+    var text = lines.join("\r\n");
+    var done = function(){ toast("Copiado! Cole no Excel com Ctrl+V."); };
+    try {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } catch(e){ fallback(); }
+    function fallback(){
+      var ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); } catch(e){ toast("Não foi possível copiar."); }
+      ta.remove();
+    }
+  }
+
+  // ---------- interface ----------
+  var tt;
+  function toast(m){ var t = $("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(function(){ t.classList.remove("show"); }, 3200); }
+  function setStatus(h){ $("status").innerHTML = h; }
+
+  $("btnFolder").onclick = function(){ $("inFolder").click(); };
+  $("btnFiles").onclick = function(){ $("inFiles").click(); };
+  $("inFolder").onchange = function(e){ addFiles(e.target.files); e.target.value = ""; };
+  $("inFiles").onchange = function(e){ addFiles(e.target.files); e.target.value = ""; };
+  $("btnClear").onclick = function(){ notes = []; loaded = []; cancelled = {}; seen = {}; skipped = []; duplicates = 0; report = null; curItem = -1; curKey = ""; $("itemSearch").value = ""; render(); setStatus(""); };
+  $("btnXlsx").onclick = exportXlsx;
+  $("btnPdf").onclick = exportPdf;
+  $("btnNotesXlsx").onclick = exportNotesXlsx;
+  $("btnNotesXlsx2").onclick = exportNotesXlsx;
+  $("btnItemXlsx").onclick = exportItemXlsx;
+  $("btnCopy").onclick = copyTable;
+  $("optSort").onchange = function(){ if (notes.length) build(); else savePrefs(); };
+  $("optQty").onchange = function(){ if (notes.length) build(); else savePrefs(); };
+
+  // arrastar e soltar (arquivos ou pastas)
+  var drop = $("drop");
+  ["dragenter","dragover"].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add("over"); }); });
+  ["dragleave","drop"].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove("over"); }); });
+  drop.addEventListener("drop", function(e){
+    var items = e.dataTransfer.items;
+    if (items && items.length && items[0].webkitGetAsEntry){
+      var entries = []; for (var i=0;i<items.length;i++){ var en = items[i].webkitGetAsEntry(); if (en) entries.push(en); }
+      walk(entries).then(addFiles);
+    } else addFiles(e.dataTransfer.files);
+  });
+  function walk(entries){
+    var out = [];
+    function go(en){
+      if (en.isFile) return new Promise(function(res){ en.file(function(f){ out.push(f); res(); }, function(){ res(); }); });
+      if (en.isDirectory){
+        var rd = en.createReader();
+        return new Promise(function(res){
+          var all = [];
+          (function more(){ rd.readEntries(function(batch){
+            if (!batch.length) Promise.all(all.map(go)).then(res);
+            else { all = all.concat(Array.prototype.slice.call(batch)); more(); }
+          }, function(){ res(); }); })();
+        });
+      }
+      return Promise.resolve();
+    }
+    return Promise.all(entries.map(go)).then(function(){ return out; });
+  }
+
+  loadPrefs(); setNow();
+  link("optTitle", "vTitle", true);
+  link("optTransp", "vTransp", false);
+  link("optDate", "vDate", false);
+  link("optTime", "vTime", false);
+  render();
+  getDownloads();
+})();
+</script>
+</body>
+</html>
