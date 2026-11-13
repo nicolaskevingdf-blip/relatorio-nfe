@@ -112,6 +112,27 @@
   .ctag{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12.5px;font-weight:700;white-space:nowrap}
   .ctag.ok{background:#e5f4e4;color:#1d6b2a}.ctag.warn{background:#f9eeda;color:#8a5a00}.ctag.bad{background:#fbebeb;color:#a12a2a}
   .cwarn{background:#f9eeda;color:#8a5a00;border-radius:8px;padding:8px 12px;margin:0 0 12px;font-size:14px}
+  .cprinthead,table.comp .pchk{display:none}
+  @media print{
+    @page{size:A4 landscape;margin:10mm}
+    body.mode-comp{background:#fff}
+    body.mode-comp .wrap{max-width:none;padding:0}
+    body.mode-comp h1,body.mode-comp .sub,body.mode-comp .tabs,body.mode-comp .tabhint,body.mode-comp .czones,
+    body.mode-comp #cAvisos,body.mode-comp #compArea .panel>.row,body.mode-comp .cstats,body.mode-comp .cfil,body.mode-comp .toast{display:none!important}
+    body.mode-comp #compArea .panel{border:none;padding:0;margin:0}
+    body.mode-comp .cprinthead{display:block;margin:0 0 6px}
+    .cprinthead h2{margin:0;font-size:16px}
+    .cprinthead p{margin:2px 0 0;font-size:11px;color:#333}
+    table.comp{font-size:11px}
+    table.comp th{background:#eee!important;border-bottom:1.5px solid #000;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    table.comp td{padding:3px 5px;border-bottom:1px solid #bbb}
+    table.comp td.o{color:#333;font-size:10px}
+    table.comp tr{break-inside:avoid}
+    table.comp thead{display:table-header-group}
+    table.comp .pchk{display:table-cell;width:22px;text-align:center}
+    table.comp td.pchk span{display:inline-block;width:12px;height:12px;border:1.2px solid #000}
+    .ctag{border:1px solid currentColor;padding:0 6px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
 </style>
 </head>
 <body>
@@ -156,6 +177,7 @@
         <button class="btn primary" id="cGo" disabled>Gerar pares</button>
         <button class="btn" id="cXls" disabled>Baixar Excel (.csv)</button>
         <button class="btn" id="cCopy" disabled>Copiar para colar no Excel</button>
+        <button class="btn" id="cPrint" disabled>Imprimir</button>
         <span class="small">Pode anexar em várias vezes. Se uma nota cair no lado errado, ela vai para o lado certo pelo CNPJ do emitente.</span>
       </div>
       <div id="cOut"><div class="empty">Anexe os XML dos dois lados e clique em Gerar pares.</div></div>
@@ -1515,13 +1537,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     $("cAvisos").innerHTML = (avisos || []).map(function(a){ return '<div class="cwarn">' + esc(a) + "</div>"; }).join("");
   }
 
+  // casa item a item (mesmo NCM e quantidade); entre vários iguais, prefere o de descrição mais parecida
+  function itTok(x){ var o = {}; ascii(x).replace(/[^A-Z ]/g, " ").split(/\s+/).forEach(function(w){ if (w.length > 3 && w !== "CARNE" && w !== "NOSSA" && w !== "TERRA" && w !== "BLOCO") o[w] = 1; }); return o; }
   function diff(a, b){
-    var ca = {}, cb = {};
-    a.items.forEach(function(i){ var k = i.ncm + "|" + i.q; ca[k] = (ca[k] || 0) + 1; });
-    b.items.forEach(function(i){ var k = i.ncm + "|" + i.q; cb[k] = (cb[k] || 0) + 1; });
-    var soB = b.items.filter(function(i){ var k = i.ncm + "|" + i.q; if (ca[k]){ ca[k]--; return false; } return true; });
-    var soA = a.items.filter(function(i){ var k = i.ncm + "|" + i.q; if (cb[k]){ cb[k]--; return false; } return true; });
-    return {soA:soA, soB:soB};
+    var pares = [];
+    b.items.forEach(function(ib, j){ a.items.forEach(function(ia, i){
+      if (ia.ncm !== ib.ncm || ia.q !== ib.q) return;
+      var ta = itTok(ia.x), tb = itTok(ib.x), s = 0; for (var w in tb) if (ta[w]) s++;
+      pares.push({i:i, j:j, s:s});
+    }); });
+    pares.sort(function(x, y){ return y.s - x.s; });
+    var ua = {}, ub = {};
+    pares.forEach(function(p){ if (!ua[p.i] && !ub[p.j]){ ua[p.i] = ub[p.j] = 1; } });
+    return {soA:a.items.filter(function(_, i){ return !ua[i]; }), soB:b.items.filter(function(_, j){ return !ub[j]; })};
   }
   function fmtIt(i){ return title(i.x) + " " + String(i.q).replace(".", ",") + " " + (i.u || "").toLowerCase(); }
 
@@ -1568,7 +1596,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       obs:"NT " + brl(a.total) + " · " + a.items.map(fmtIt).join(", ") + " · falta a nota da Central"}); });
     rows.sort(function(x, y){ return ((+x.cm || 1e9) - (+y.cm || 1e9)) || (+x.nt - +y.nt); });
     filtro = "Todos"; render();
-    $("cXls").disabled = $("cCopy").disabled = false;
+    $("cXls").disabled = $("cCopy").disabled = $("cPrint").disabled = false;
   }
 
   function render(){
@@ -1578,12 +1606,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     var fb = ["Todos", "Batem", "Bate em parte", "Duplicada", "Sem par"].map(function(f){
       return '<button class="btn' + (f === filtro ? " on" : "") + '" data-cf="' + f + '">' + f + (f === "Todos" ? "" : " (" + n[f] + ")") + "</button>";
     }).join("");
+    var d = new Date(), quando = d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", {hour:"2-digit", minute:"2-digit"});
     $("cOut").innerHTML =
+      '<div class="cprinthead"><h2>Comparativo Nossa Terra × Central' + (filtro === "Todos" ? "" : " — " + esc(filtro)) + "</h2><p>" +
+      count("NT") + " notas Nossa Terra · " + count("CM") + " notas Central · " + n["Batem"] + " batem · " + (n["Bate em parte"] + n["Duplicada"]) + " para conferir · " + n["Sem par"] + " sem par · impresso em " + quando + "</p></div>" +
       '<div class="cstats"><div class="cstat"><b>' + count("NT") + '</b>Nossa Terra</div><div class="cstat"><b>' + count("CM") + '</b>Central</div>' +
       '<div class="cstat"><b>' + n["Batem"] + '</b>batem</div><div class="cstat"><b>' + (n["Bate em parte"] + n["Duplicada"]) + '</b>para conferir</div><div class="cstat"><b>' + n["Sem par"] + '</b>sem par</div></div>' +
       '<div class="cfil">' + fb + "</div>" +
-      '<table class="comp"><thead><tr><th>NF Nossa Terra</th><th>NF Central</th><th>Situação</th><th>Escola / cliente</th><th>Observação</th></tr></thead><tbody>' +
-      vis.map(function(r){ return '<tr><td class="n">' + (r.nt || "—") + '</td><td class="n">' + (r.cm || "—") + '</td><td><span class="ctag ' + r.cls + '">' + r.st + "</span></td><td>" + esc(r.escola) + '</td><td class="o">' + esc(r.obs) + "</td></tr>"; }).join("") +
+      '<table class="comp"><thead><tr><th class="pchk">✓</th><th>NF Nossa Terra</th><th>NF Central</th><th>Situação</th><th>Escola / cliente</th><th>Observação</th></tr></thead><tbody>' +
+      vis.map(function(r){ return '<tr><td class="pchk"><span></span></td><td class="n">' + (r.nt || "—") + '</td><td class="n">' + (r.cm || "—") + '</td><td><span class="ctag ' + r.cls + '">' + r.st + "</span></td><td>" + esc(r.escola) + '</td><td class="o">' + esc(r.obs) + "</td></tr>"; }).join("") +
       "</tbody></table>";
     Array.prototype.forEach.call(document.querySelectorAll("[data-cf]"), function(b){ b.onclick = function(){ filtro = b.dataset.cf; render(); }; });
   }
@@ -1628,10 +1659,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     b.onclick = function(){ pickSide = b.dataset.cpick; $(b.dataset.cdir ? "cInFolder" : "cInFiles").click(); };
   });
   Array.prototype.forEach.call(document.querySelectorAll("[data-cclear]"), function(b){
-    b.onclick = function(){ store[b.dataset.cclear] = {}; rows = []; refresh(); $("cOut").innerHTML = '<div class="empty">Anexe os XML dos dois lados e clique em Gerar pares.</div>'; $("cXls").disabled = $("cCopy").disabled = true; };
+    b.onclick = function(){ store[b.dataset.cclear] = {}; rows = []; refresh(); $("cOut").innerHTML = '<div class="empty">Anexe os XML dos dois lados e clique em Gerar pares.</div>'; $("cXls").disabled = $("cCopy").disabled = $("cPrint").disabled = true; };
   });
   ["cInFiles", "cInFolder"].forEach(function(id){ $(id).onchange = function(e){ addFiles(pickSide, e.target.files); e.target.value = ""; }; });
   $("cGo").onclick = gerar;
+  $("cPrint").onclick = function(){ render(); window.print(); };
   $("cCopy").onclick = function(){
     navigator.clipboard.writeText(tabela("\t")).then(function(){ toast("Tabela copiada: cole no Excel."); }, function(){ toast("Não consegui copiar. Use Baixar Excel."); });
   };
