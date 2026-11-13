@@ -172,6 +172,7 @@
         <select id="itemSel"></select>
       </label>
       <button class="btn" id="btnItemXlsx" disabled>Baixar consulta (Excel)</button>
+      <button class="btn" id="btnItemPdf" disabled>Baixar consulta (PDF)</button>
     </div>
     <div id="itemList"></div>
     <p class="small" style="margin:8px 0 0">Dica: clicar numa linha do relatório abaixo também abre a consulta desse item.</p>
@@ -576,7 +577,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   function render(){
     var has = notes.length > 0;
-    ["btnXlsx","btnPdf","btnNotesXlsx","btnCopy","btnClear","btnItemXlsx"].forEach(function(id){ $(id).disabled = !has; });
+    ["btnXlsx","btnPdf","btnNotesXlsx","btnCopy","btnClear","btnItemXlsx","btnItemPdf"].forEach(function(id){ $(id).disabled = !has; });
 
     // status
     var st = "";
@@ -668,7 +669,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function brl(v){ return v.toLocaleString("pt-BR", {style:"currency", currency:"BRL"}); }
   function dBR(iso){ return iso ? iso.slice(0,10).split("-").reverse().join("/") : ""; }
   function renderItemList(){
-    $("btnItemXlsx").disabled = !(report && curItem >= 0);
+    $("btnItemXlsx").disabled = $("btnItemPdf").disabled = !(report && curItem >= 0);
     Array.prototype.forEach.call(document.querySelectorAll("table.rep tr.sel"), function(tr){ tr.classList.remove("sel"); });
     if (!report || curItem < 0){ $("itemList").innerHTML = ""; return; }
     var tr = document.querySelector('table.rep tr[data-item="' + curItem + '"]'); if (tr) tr.classList.add("sel");
@@ -1041,6 +1042,113 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       });
     });
   }
+  // ===== PDF da consulta por item =====
+  function itemFileBase(it){ return ("Item " + it.cProd + " " + it.xProd).replace(/[\\/:*?"<>|]+/g, " ").slice(0, 80).trim(); }
+  function exportItemPdf(){
+    if (curItem < 0) return;
+    var it = report.items[curItem];
+    return busy($("btnItemPdf"), "o PDF", function(){
+      return loadScript("lib/pdf-lib.min.js").then(function(){ return buildItemPdf(curItem); }).then(function(bytes){
+        return save(itemFileBase(it) + ".pdf", new Blob([bytes], {type:"application/pdf"}));
+      });
+    });
+  }
+  function buildItemPdf(idx){
+    var L = window.PDFLib, h = header(), it = report.items[idx], ls = itemLines(idx);
+    return L.PDFDocument.create().then(function(pdf){
+      pdf.setTitle("Consulta " + it.cProd + " " + it.xProd);
+      return Promise.all([pdf.embedFont(L.StandardFonts.Helvetica), pdf.embedFont(L.StandardFonts.HelveticaBold), pdf.embedPng(logoBytes())]).then(function(f){
+        var F = f[0], B = f[1], LOGO = f[2], black = L.rgb(0,0,0);
+        var W = 595.28, H = 841.89, M = 36, FS = 9.5, RH = 16.5, PAD = 4;
+        var clean = function(font, s){
+          s = String(s == null ? "" : s).replace(/≥/g, ">=").replace(/≤/g, "<=").replace(/[\u2010-\u2012]/g, "-").replace(/\u00A0/g, " ");
+          try { font.encodeText(s); return s; } catch(e){
+            return Array.prototype.map.call(s, function(ch){ try { font.encodeText(ch); return ch; } catch(_){ return "?"; } }).join("");
+          }
+        };
+        var tw = function(font, s, size){ return font.widthOfTextAtSize(s, size); };
+        var cell = function(pg, font, s, size, x0, x1, y, al){
+          s = clean(font, s);
+          while (s.length > 1 && tw(font, s, size) > (x1 - x0) - 2*PAD) s = s.slice(0, -1);
+          var w = tw(font, s, size), x = al === "r" ? x1 - PAD - w : al === "c" ? (x0 + x1 - w)/2 : x0 + PAD;
+          pg.drawText(s, {x:x, y:y, size:size, font:font, color:black});
+        };
+        // colunas: NF, Série, Emissão, Destinatário, UF, Qtde, Valor
+        var cw = [52, 34, 60, 0, 26, 70, 80];
+        cw[3] = (W - 2*M) - cw.reduce(function(a,b){ return a + b; }, 0);
+        var xs = [M]; cw.forEach(function(w, i){ xs[i+1] = xs[i] + w; });
+        var al = ["l","r","l","l","l","r","r"];
+        var heads = ["NF","Série","Emissão","Destinatário","UF","Qtde " + it.unit,"Valor do item"];
+        var headBlue = L.rgb(183/255, 205/255, 224/255), headInk = L.rgb(20/255, 38/255, 58/255), grid = L.rgb(.88,.88,.88);
+        var pages = [], page, y;
+        function tableHead(){
+          page.drawRectangle({x:M, y:y - 18, width:W - 2*M, height:18, color:headBlue});
+          heads.forEach(function(t, i){
+            var s = clean(B, t), w = tw(B, s, 10), x = al[i] === "r" ? xs[i+1] - PAD - w : xs[i] + PAD;
+            page.drawText(s, {x:x, y:y - 12.5, size:10, font:B, color:headInk});
+          });
+          y -= 18;
+        }
+        function newPage(first){
+          page = pdf.addPage([W, H]); pages.push(page); y = H - M;
+          if (first){
+            var lgW = 170, lgH = lgW * LOGO_H / LOGO_W;
+            page.drawImage(LOGO, {x:(W - lgW) / 2, y:y - lgH, width:lgW, height:lgH});
+            y -= lgH + 18;
+            var t1 = clean(B, "CONSULTA POR ITEM"), s1 = 13;
+            page.drawText(t1, {x:(W - tw(B, t1, s1)) / 2, y:y - s1, size:s1, font:B});
+            y -= s1 + 10;
+            var bx = M, bw = W - 2*M, bh = 26;
+            page.drawRectangle({x:bx, y:y - bh, width:bw, height:bh, borderColor:black, borderWidth:1.5});
+            var t2 = clean(B, it.cProd + " - " + it.xProd + (it.unit ? " (" + it.unit + ")" : "")), s2 = 12;
+            while (s2 > 8 && tw(B, t2, s2) > bw - 12) s2 -= .5;
+            page.drawText(t2, {x:bx + (bw - tw(B, t2, s2)) / 2, y:y - bh + (bh - s2*0.7) / 2, size:s2, font:B});
+            y -= bh + 10;
+            var info = [];
+            if (h.title) info.push("Relatório: " + h.title);
+            if (h.transp) info.push("Transportadora: " + h.transp);
+            info.push("Data: " + h.date + (h.time ? " " + h.time : ""));
+            var inf = clean(F, info.join("     ")), sz = 9.5;
+            while (sz > 7 && tw(F, inf, sz) > W - 2*M) sz -= .5;
+            page.drawText(inf, {x:M, y:y - sz, size:sz, font:F, color:L.rgb(.2,.2,.2)});
+            y -= sz + 12;
+          }
+          tableHead();
+        }
+        newPage(true);
+        ls.forEach(function(l){
+          var n = l.note, dw = (xs[4] - xs[3]) - 2*PAD, dest = clean(F, n.dest), dsz = FS, dl = [dest];
+          while (dsz > 8 && tw(F, dest, dsz) > dw) dsz -= .25;
+          if (tw(F, dest, dsz) > dw){   // ainda não cabe: quebra em 2 linhas
+            var words = dest.split(" "), a1 = "";
+            while (words.length && tw(F, (a1 ? a1 + " " : "") + words[0], dsz) <= dw) a1 = (a1 ? a1 + " " : "") + words.shift();
+            dl = [a1 || words.shift(), words.join(" ")];
+          }
+          var rh = dl.length > 1 ? RH + 10 : RH;
+          if (y - rh < M + 40) newPage(false);
+          var base = y - RH + 5.5;
+          var vals = [n.nNF, n.serie, dBR(n.dhEmi), "", n.uf, fmt(l.qty), brl(l.val)];
+          vals.forEach(function(v, i){ if (i !== 3) cell(page, F, v, FS, xs[i], xs[i+1], base, al[i]); });
+          dl.forEach(function(t, j){ cell(page, F, t, dsz, xs[3], xs[4], base - j*(dsz + 1.5), "l"); });
+          y -= rh;
+          page.drawLine({start:{x:M, y:y}, end:{x:W - M, y:y}, thickness:.4, color:grid});
+        });
+        if (y - 22 < M + 20) newPage(false);
+        page.drawLine({start:{x:M, y:y - 1}, end:{x:W - M, y:y - 1}, thickness:1.2, color:black});
+        var tq = ls.reduce(function(a,l){ return a + l.qty; }, 0), tv = ls.reduce(function(a,l){ return a + l.val; }, 0);
+        var fy = y - 15;
+        cell(page, B, "TOTAL - " + ls.length + " nota(s)", FS + .5, xs[0], xs[5], fy, "l");
+        cell(page, B, fmt(r6(tq)) + (it.unit ? " " + it.unit : ""), FS + .5, xs[5] - 30, xs[6], fy, "r");
+        cell(page, B, brl(r2(tv)), FS + .5, xs[6], xs[7], fy, "r");
+        pages.forEach(function(p, i){
+          var s = "Página " + (i+1) + " de " + pages.length;
+          p.drawText(s, {x:W - M - tw(F, s, 8), y:M - 14, size:8, font:F, color:L.rgb(.45,.45,.45)});
+        });
+        return pdf.save();
+      });
+    });
+  }
+
   function buildPdf(){
     var L = window.PDFLib, h = header(), rs = rows();
     return L.PDFDocument.create().then(function(pdf){
@@ -1201,6 +1309,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   $("btnNotesXlsx").onclick = exportNotesXlsx;
   $("btnNotesXlsx2").onclick = exportNotesXlsx;
   $("btnItemXlsx").onclick = exportItemXlsx;
+  $("btnItemPdf").onclick = exportItemPdf;
   $("btnCopy").onclick = copyTable;
   $("optSort").onchange = function(){ if (notes.length) build(); else savePrefs(); };
   $("optQty").onchange = function(){ if (notes.length) build(); else savePrefs(); };
