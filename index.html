@@ -92,6 +92,26 @@
   .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#1d2320;color:#fff;padding:9px 16px;border-radius:8px;font-size:14px;opacity:0;transition:.2s;pointer-events:none;max-width:90vw}
   .toast.show{opacity:1}
   .hidden{display:none!important}
+  body.mode-comp{--accent:#7a4a8c;--accent-soft:#f1e8f5}
+  .czones{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.czones{grid-template-columns:1fr}}
+  .czone{text-align:center;border:2px dashed #b9aac2;transition:.15s}
+  .czone.over{border-color:var(--accent);background:var(--accent-soft)}
+  .czone h3{margin:0 0 2px;font-size:17px}
+  .ccnt{font-size:30px;font-weight:800;color:var(--accent);margin:6px 0 0}
+  .cstats{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 10px}
+  .cstat{border:1px solid var(--line);border-radius:9px;padding:6px 14px;background:#fff}
+  .cstat b{display:block;font-size:20px}
+  .cfil{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+  .cfil button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  table.comp{border-collapse:collapse;width:100%;font-size:14px}
+  table.comp th{background:var(--accent-soft);text-align:left;padding:7px 8px;border-bottom:2px solid var(--accent)}
+  table.comp td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.comp td.n{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+  table.comp td.o{color:var(--muted);font-size:13px}
+  .ctag{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12.5px;font-weight:700;white-space:nowrap}
+  .ctag.ok{background:#e5f4e4;color:#1d6b2a}.ctag.warn{background:#f9eeda;color:#8a5a00}.ctag.bad{background:#fbebeb;color:#a12a2a}
+  .cwarn{background:#f9eeda;color:#8a5a00;border-radius:8px;padding:8px 12px;margin:0 0 12px;font-size:14px}
 </style>
 </head>
 <body>
@@ -101,9 +121,48 @@
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" data-tab="nt" id="tabNt"><b>Nossa Terra</b><span>Congelado e Seco separados</span></button>
     <button class="tab" role="tab" data-tab="geral" id="tabGeral"><b>Relatórios gerais</b><span>Todos os itens em uma lista só</span></button>
+    <button class="tab" role="tab" data-tab="comp" id="tabComp"><b>Comparativo</b><span>Nossa Terra × Central: notas para juntar</span></button>
   </div>
   <p class="tabhint" id="tabHint"></p>
 
+  <div id="compArea" class="hidden">
+    <div class="czones">
+      <div class="panel czone" id="czNT">
+        <h3>1 · XML da Nossa Terra</h3>
+        <p class="small">Notas da Cooperativa Nossa Terra para a Central</p>
+        <div class="ccnt" id="ccNT">0</div><p class="small" style="margin:0">notas anexadas</p>
+        <div class="row" style="justify-content:center;margin-top:10px">
+          <button class="btn" data-cpick="NT" data-cdir="1">Selecionar pasta</button>
+          <button class="btn" data-cpick="NT">Selecionar arquivos</button>
+          <button class="btn" data-cclear="NT">Limpar</button>
+        </div>
+      </div>
+      <div class="panel czone" id="czCM">
+        <h3>2 · XML da Central</h3>
+        <p class="small">Notas da Central para escolas e prefeituras</p>
+        <div class="ccnt" id="ccCM">0</div><p class="small" style="margin:0">notas anexadas</p>
+        <div class="row" style="justify-content:center;margin-top:10px">
+          <button class="btn" data-cpick="CM" data-cdir="1">Selecionar pasta</button>
+          <button class="btn" data-cpick="CM">Selecionar arquivos</button>
+          <button class="btn" data-cclear="CM">Limpar</button>
+        </div>
+      </div>
+    </div>
+    <input type="file" id="cInFiles" accept=".xml,text/xml,application/xml" multiple class="hidden">
+    <input type="file" id="cInFolder" webkitdirectory directory multiple class="hidden">
+    <div id="cAvisos"></div>
+    <div class="panel">
+      <div class="row">
+        <button class="btn primary" id="cGo" disabled>Gerar pares</button>
+        <button class="btn" id="cXls" disabled>Baixar Excel (.csv)</button>
+        <button class="btn" id="cCopy" disabled>Copiar para colar no Excel</button>
+        <span class="small">Pode anexar em várias vezes. Se uma nota cair no lado errado, ela vai para o lado certo pelo CNPJ do emitente.</span>
+      </div>
+      <div id="cOut"><div class="empty">Anexe os XML dos dois lados e clique em Gerar pares.</div></div>
+    </div>
+  </div>
+
+  <div id="mainArea">
   <div class="panel">
     <div class="drop" id="drop">
       <p>Arraste os arquivos XML (ou a pasta) para cá, ou</p>
@@ -189,6 +248,7 @@
       <div class="rtitle" contenteditable="true" id="vTitle">CENTRAL</div>
     </div>
     <div id="repBody"><div class="empty">Nenhum XML carregado ainda.</div></div>
+  </div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -281,6 +341,21 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return tp || {};
   }
   function applyTab(t){
+    var isComp = t === "comp";
+    $("mainArea").classList.toggle("hidden", isComp);
+    $("compArea").classList.toggle("hidden", !isComp);
+    document.body.classList.toggle("mode-comp", isComp);
+    $("tabComp").classList.toggle("on", isComp); $("tabComp").setAttribute("aria-selected", isComp);
+    if (isComp){
+      TAB = t;
+      document.body.classList.remove("mode-geral");
+      $("tabNt").classList.remove("on"); $("tabGeral").classList.remove("on");
+      $("tabNt").setAttribute("aria-selected", false); $("tabGeral").setAttribute("aria-selected", false);
+      $("tabHint").innerHTML = "<b>Comparativo:</b> anexe os XML da Nossa Terra e os da Central e clique em <b>Gerar pares</b>. Sai a lista de qual nota da Nossa Terra vai junto com qual nota da Central, pela escola e pelos itens.";
+      try { if (location.hash !== "#comparativo") history.replaceState(null, "", "#comparativo"); } catch(e){}
+      try { prefsCache.lastTab = "comp"; localStorage.setItem("relxml-prefs", JSON.stringify(prefsCache)); } catch(e){}
+      return;
+    }
     TAB = t;
     var s = store[t] || {loaded:[], cancelled:{}, seen:{}, skipped:[], duplicates:0, curKey:"", search:""};
     loaded = s.loaded; cancelled = s.cancelled; seen = s.seen; skipped = s.skipped; duplicates = s.duplicates;
@@ -298,8 +373,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     try { if (location.hash !== "#" + TABS[t].hash) history.replaceState(null, "", "#" + TABS[t].hash); } catch(e){}
     if (loaded.length) build(); else { notes = []; report = null; render(); setStatus(""); savePrefs(); }
   }
-  function switchTab(t){ if (t === TAB) return; saveState(); applyTab(t); }
-  function tabFromHash(){ var hh = (location.hash || "").replace("#", ""); return hh === "geral" ? "geral" : hh === "nossa-terra" ? "nt" : null; }
+  function switchTab(t){ if (t === TAB) return; if (TAB !== "comp") saveState(); applyTab(t); }
+  function tabFromHash(){ var hh = (location.hash || "").replace("#", ""); return hh === "geral" ? "geral" : hh === "nossa-terra" ? "nt" : hh === "comparativo" ? "comp" : null; }
   function loadPrefs(){
     try{
       var p = JSON.parse(localStorage.getItem("relxml-prefs") || "{}");
@@ -1315,6 +1390,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   $("optQty").onchange = function(){ if (notes.length) build(); else savePrefs(); };
   $("tabNt").onclick = function(){ switchTab("nt"); };
   $("tabGeral").onclick = function(){ switchTab("geral"); };
+  $("tabComp").onclick = function(){ switchTab("comp"); };
   window.addEventListener("hashchange", function(){ var t = tabFromHash(); if (t) switchTab(t); });
   var regTimer;
   ["regCodes","regWords","regSeco"].forEach(function(id){ $(id).addEventListener("input", function(){ clearTimeout(regTimer); regTimer = setTimeout(function(){ if (notes.length) build(); else savePrefs(); }, 400); }); });
@@ -1323,12 +1399,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // arrastar e soltar (arquivos ou pastas) — aceita em qualquer lugar da página
   var drop = $("drop"), dragDepth = 0;
   function isFileDrag(e){ var t = e.dataTransfer && e.dataTransfer.types; return t && Array.prototype.indexOf.call(t, "Files") >= 0; }
-  window.addEventListener("dragenter", function(e){ if (!isFileDrag(e)) return; e.preventDefault(); dragDepth++; document.body.classList.add("dragging"); drop.classList.add("over"); });
+  window.addEventListener("dragenter", function(e){ if (!isFileDrag(e)) return; e.preventDefault(); if (TAB === "comp") return; dragDepth++; document.body.classList.add("dragging"); drop.classList.add("over"); });
   window.addEventListener("dragover", function(e){ if (!isFileDrag(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
   window.addEventListener("dragleave", function(e){ if (!isFileDrag(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth){ document.body.classList.remove("dragging"); drop.classList.remove("over"); } });
   window.addEventListener("drop", function(e){
     if (!isFileDrag(e)) return;
     e.preventDefault(); dragDepth = 0; document.body.classList.remove("dragging"); drop.classList.remove("over");
+    if (TAB === "comp"){ toast("Solte os XML em cima de uma das duas áreas: Nossa Terra ou Central."); return; }
     var dt = e.dataTransfer, items = dt.items, entries = [];
     var plain = Array.prototype.slice.call(dt.files || []);
     if (items && items.length && items[0].webkitGetAsEntry){
@@ -1372,8 +1449,200 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   link("optTransp", "vTransp", false);
   link("optDate", "vDate", false);
   link("optTime", "vTime", false);
-  applyTab(tabFromHash() || (prefsCache.lastTab === "geral" ? "geral" : "nt"));
+  applyTab(tabFromHash() || (prefsCache.lastTab === "geral" ? "geral" : prefsCache.lastTab === "comp" ? "comp" : "nt"));
   getDownloads();
+})();
+</script>
+<script>
+// ---------- aba Comparativo: pareia notas da Nossa Terra com as da Central ----------
+(function(){
+  var NS = "http://www.portalfiscal.inf.br/nfe";
+  var CNPJ_NT = "05047086000121", CNPJ_CM = "30963826000117";
+  var store = {NT:{}, CM:{}}, rows = [], filtro = "Todos", pickSide = "NT";
+  var STOP = {};
+  ("ESC EST ENS FUND MED EDUC BASICA E EEEF EEEB EEEM EEEP ETE ETS COL COLEGIO ESTADUAL INST PROF PROFA PROFESSOR DE DA DO DOS DAS TEC AGRICOLA ED PROFIS SR GOV GOVERNADOR DR PORTO ALEGRE CANOAS VIAMAO ALVORADA GRAVATAI CACHOEIRINHA ESTEIO GUAIBA TRIUNFO SAO JERONIMO BOM PRINCIPIO BARRA RIBEIRO JARDIM PRADO TAQUARA PORTAO ENTREGA DIA").split(" ").forEach(function(w){ STOP[w] = 1; });
+  function $(id){ return document.getElementById(id); }
+  function toast(m){ var t = $("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(function(){ t.classList.remove("show"); }, 3500); }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function brl(v){ return v.toLocaleString("pt-BR", {style:"currency", currency:"BRL"}); }
+  function ascii(s){ return s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toUpperCase(); }
+  function tokens(s){ var o = {}; ascii(s).replace(/[^A-Z0-9 ]/g, " ").split(/\s+/).forEach(function(w){ if (w.length > 1 && !STOP[w]) o[w] = 1; }); return o; }
+  function title(s){ return s.toLowerCase().replace(/(^|[\s.\-\/(])(\p{L})/gu, function(m, a, b){ return a + b.toUpperCase(); }); }
+  function tx(el, tag){ var e = el && el.getElementsByTagNameNS(NS, tag)[0]; return e ? e.textContent.trim() : ""; }
+
+  function parse(text){
+    var doc = new DOMParser().parseFromString(text, "text/xml");
+    var inf = doc.getElementsByTagNameNS(NS, "infNFe")[0]; if (!inf) return null;
+    var emit = inf.getElementsByTagNameNS(NS, "emit")[0], dest = inf.getElementsByTagNameNS(NS, "dest")[0];
+    var items = Array.prototype.map.call(inf.getElementsByTagNameNS(NS, "det"), function(d){
+      return {ncm:tx(d, "NCM"), q:Math.round(parseFloat(tx(d, "qCom")) * 1000) / 1000, x:tx(d, "xProd"), u:tx(d, "uCom")};
+    });
+    var cpl = tx(inf, "infCpl");
+    var r = {nf:tx(inf, "nNF"), emit:tx(emit, "CNPJ"), dest:tx(dest, "xNome"), mun:tx(dest, "xMun"), nat:tx(inf, "natOp"),
+             total:parseFloat(tx(inf.getElementsByTagNameNS(NS, "ICMSTot")[0], "vNF")) || 0, items:items};
+    if (r.emit === CNPJ_NT){
+      var m = cpl.match(/ITEM III (.*?) VEN\.:/) || cpl.match(/2012 (.*?) VEN\.:/), e = m ? m[1] : "";
+      var r2 = cpl.match(/(ESC EST.*?)- CANOAS/); if (/RNC/.test(cpl) && r2) e = r2[1];
+      r.esc = e;
+    } else r.esc = r.dest + " - " + r.mun;
+    r.tok = tokens(r.esc);
+    r.key = items.map(function(i){ return i.ncm + "|" + i.q; }).sort().join(";");
+    return r;
+  }
+
+  function addFiles(side, files){
+    files = Array.prototype.filter.call(files, function(f){ return /\.xml$/i.test(f.name); });
+    if (!files.length){ toast("Nenhum arquivo .xml encontrado."); return; }
+    var avisos = [], movidas = [];
+    Promise.all(files.map(function(f){ return f.text().then(function(t){ return {f:f, r:parse(t)}; }); })).then(function(list){
+      list.forEach(function(o){
+        var r = o.r;
+        if (!r){ avisos.push(o.f.name + ": não parece NF-e"); return; }
+        var real = r.emit === CNPJ_NT ? "NT" : r.emit === CNPJ_CM ? "CM" : null;
+        if (!real){ avisos.push("NF " + r.nf + ": emitente " + r.emit + " não é a Nossa Terra nem a Central, ficou de fora"); return; }
+        if (real !== side) movidas.push(r.nf);
+        store[real][r.nf] = r;
+      });
+      if (movidas.length) avisos.unshift(movidas.length + " nota(s) estavam no lado errado e foram para o lado certo pelo CNPJ do emitente (" + movidas.slice(0, 8).join(", ") + (movidas.length > 8 ? "…" : "") + ").");
+      refresh(avisos);
+      if (rows.length) gerar();
+    });
+  }
+  function count(s){ return Object.keys(store[s]).length; }
+  function refresh(avisos){
+    $("ccNT").textContent = count("NT"); $("ccCM").textContent = count("CM");
+    $("cGo").disabled = !(count("NT") && count("CM"));
+    $("cAvisos").innerHTML = (avisos || []).map(function(a){ return '<div class="cwarn">' + esc(a) + "</div>"; }).join("");
+  }
+
+  function diff(a, b){
+    var ca = {}, cb = {};
+    a.items.forEach(function(i){ var k = i.ncm + "|" + i.q; ca[k] = (ca[k] || 0) + 1; });
+    b.items.forEach(function(i){ var k = i.ncm + "|" + i.q; cb[k] = (cb[k] || 0) + 1; });
+    var soB = b.items.filter(function(i){ var k = i.ncm + "|" + i.q; if (ca[k]){ ca[k]--; return false; } return true; });
+    var soA = a.items.filter(function(i){ var k = i.ncm + "|" + i.q; if (cb[k]){ cb[k]--; return false; } return true; });
+    return {soA:soA, soB:soB};
+  }
+  function fmtIt(i){ return title(i.x) + " " + String(i.q).replace(".", ",") + " " + (i.u || "").toLowerCase(); }
+
+  function gerar(){
+    var A = Object.keys(store.NT).map(function(k){ return store.NT[k]; });
+    var B = Object.keys(store.CM).map(function(k){ return store.CM[k]; }).sort(function(x, y){ return +x.nf - +y.nf; });
+    var cand = [];
+    B.forEach(function(b){ A.forEach(function(a){
+      var nm = 0; for (var w in b.tok) if (a.tok[w]) nm++;
+      var same = a.key === b.key;
+      if (!nm && !same) return;
+      var d = diff(a, b), comuns = b.items.length - d.soB.length;
+      var sc = nm ? nm * 10 + (same ? 50 : comuns * 4) : 20;
+      cand.push({a:a, b:b, sc:sc, same:same, nm:nm, soA:d.soA, soB:d.soB});
+    }); });
+    cand.sort(function(x, y){ return y.sc - x.sc; });
+    var usedA = {}, usedB = {}, pares = [];
+    cand.forEach(function(c){
+      if (usedB[c.b.nf]) return;
+      if (usedA[c.a.nf]){
+        var first = usedA[c.a.nf];
+        if (c.same && first.same && c.nm > 0){ c.dup = first.b.nf; pares.push(c); usedB[c.b.nf] = 1; }
+        return;
+      }
+      if (!c.same && !c.nm) return;
+      usedA[c.a.nf] = c; usedB[c.b.nf] = 1; pares.push(c);
+    });
+    rows = pares.map(function(p){
+      var r = {nt:p.a.nf, cm:p.b.nf, escola:title(p.b.dest) + " – " + title(p.b.mun)};
+      if (p.dup){ r.st = "Duplicada"; r.cls = "warn"; r.obs = "Central " + p.dup + " e " + p.b.nf + " são iguais para uma só NF da Nossa Terra: conferir se uma foi cancelada"; }
+      else if (p.same){ r.st = "Batem"; r.cls = "ok"; r.obs = "NT " + brl(p.a.total) + " → Central " + brl(p.b.total); }
+      else {
+        r.st = "Bate em parte"; r.cls = "warn";
+        var parts = [];
+        if (p.soB.length) parts.push("só na Central: " + p.soB.map(fmtIt).join(", "));
+        if (p.soA.length) parts.push("só na Nossa Terra: " + p.soA.map(fmtIt).join(", "));
+        r.obs = parts.join(" · ") + " (NT " + brl(p.a.total) + " / Central " + brl(p.b.total) + ")";
+      }
+      return r;
+    });
+    B.forEach(function(b){ if (!usedB[b.nf]) rows.push({nt:"", cm:b.nf, escola:title(b.dest) + " – " + title(b.mun), st:"Sem par", cls:"bad",
+      obs:"Central " + brl(b.total) + " · " + b.items.map(fmtIt).join(", ") + (/MERENDA/i.test(b.nat) ? "" : " · natureza: " + title(b.nat))}); });
+    A.forEach(function(a){ if (!usedA[a.nf]) rows.push({nt:a.nf, cm:"", escola:title(a.esc || "—"), st:"Sem par", cls:"bad",
+      obs:"NT " + brl(a.total) + " · " + a.items.map(fmtIt).join(", ") + " · falta a nota da Central"}); });
+    rows.sort(function(x, y){ return ((+x.cm || 1e9) - (+y.cm || 1e9)) || (+x.nt - +y.nt); });
+    filtro = "Todos"; render();
+    $("cXls").disabled = $("cCopy").disabled = false;
+  }
+
+  function render(){
+    var n = {"Batem":0, "Bate em parte":0, "Duplicada":0, "Sem par":0};
+    rows.forEach(function(r){ n[r.st]++; });
+    var vis = filtro === "Todos" ? rows : rows.filter(function(r){ return r.st === filtro; });
+    var fb = ["Todos", "Batem", "Bate em parte", "Duplicada", "Sem par"].map(function(f){
+      return '<button class="btn' + (f === filtro ? " on" : "") + '" data-cf="' + f + '">' + f + (f === "Todos" ? "" : " (" + n[f] + ")") + "</button>";
+    }).join("");
+    $("cOut").innerHTML =
+      '<div class="cstats"><div class="cstat"><b>' + count("NT") + '</b>Nossa Terra</div><div class="cstat"><b>' + count("CM") + '</b>Central</div>' +
+      '<div class="cstat"><b>' + n["Batem"] + '</b>batem</div><div class="cstat"><b>' + (n["Bate em parte"] + n["Duplicada"]) + '</b>para conferir</div><div class="cstat"><b>' + n["Sem par"] + '</b>sem par</div></div>' +
+      '<div class="cfil">' + fb + "</div>" +
+      '<table class="comp"><thead><tr><th>NF Nossa Terra</th><th>NF Central</th><th>Situação</th><th>Escola / cliente</th><th>Observação</th></tr></thead><tbody>' +
+      vis.map(function(r){ return '<tr><td class="n">' + (r.nt || "—") + '</td><td class="n">' + (r.cm || "—") + '</td><td><span class="ctag ' + r.cls + '">' + r.st + "</span></td><td>" + esc(r.escola) + '</td><td class="o">' + esc(r.obs) + "</td></tr>"; }).join("") +
+      "</tbody></table>";
+    Array.prototype.forEach.call(document.querySelectorAll("[data-cf]"), function(b){ b.onclick = function(){ filtro = b.dataset.cf; render(); }; });
+  }
+
+  function tabela(sep){
+    var head = ["NF Nossa Terra", "NF Central", "Situação", "Escola", "Observação"];
+    var q = function(v){ v = String(v); return sep === ";" && /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    return [head].concat(rows.map(function(r){ return [r.nt, r.cm, r.st, r.escola, r.obs]; })).map(function(l){ return l.map(q).join(sep); }).join(sep === ";" ? "\r\n" : "\n");
+  }
+
+  // zonas: clique nos botões e arrastar/soltar
+  ["NT", "CM"].forEach(function(side){
+    var z = $("cz" + side), depth = 0;
+    z.addEventListener("dragenter", function(e){ e.preventDefault(); depth++; z.classList.add("over"); });
+    z.addEventListener("dragover", function(e){ e.preventDefault(); });
+    z.addEventListener("dragleave", function(){ if (--depth <= 0){ depth = 0; z.classList.remove("over"); } });
+    z.addEventListener("drop", function(e){
+      e.preventDefault(); e.stopPropagation(); depth = 0; z.classList.remove("over");
+      var dt = e.dataTransfer, entries = [];
+      if (dt.items && dt.items.length && dt.items[0].webkitGetAsEntry)
+        for (var i = 0; i < dt.items.length; i++){ var en = dt.items[i].webkitGetAsEntry(); if (en) entries.push(en); }
+      if (!entries.length){ addFiles(side, dt.files); return; }
+      walk(entries).then(function(files){ addFiles(side, files.length ? files : dt.files); });
+    });
+  });
+  function walk(entries){
+    var out = [];
+    function go(en){
+      if (en.isFile) return new Promise(function(res){ en.file(function(f){ out.push(f); res(); }, function(){ res(); }); });
+      if (en.isDirectory){
+        var rd = en.createReader();
+        return new Promise(function(res){
+          var all = [];
+          (function more(){ rd.readEntries(function(b){ if (!b.length) Promise.all(all.map(go)).then(res); else { all = all.concat(Array.prototype.slice.call(b)); more(); } }, function(){ res(); }); })();
+        });
+      }
+      return Promise.resolve();
+    }
+    return Promise.all(entries.map(go)).then(function(){ return out; });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("[data-cpick]"), function(b){
+    b.onclick = function(){ pickSide = b.dataset.cpick; $(b.dataset.cdir ? "cInFolder" : "cInFiles").click(); };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-cclear]"), function(b){
+    b.onclick = function(){ store[b.dataset.cclear] = {}; rows = []; refresh(); $("cOut").innerHTML = '<div class="empty">Anexe os XML dos dois lados e clique em Gerar pares.</div>'; $("cXls").disabled = $("cCopy").disabled = true; };
+  });
+  ["cInFiles", "cInFolder"].forEach(function(id){ $(id).onchange = function(e){ addFiles(pickSide, e.target.files); e.target.value = ""; }; });
+  $("cGo").onclick = gerar;
+  $("cCopy").onclick = function(){
+    navigator.clipboard.writeText(tabela("\t")).then(function(){ toast("Tabela copiada: cole no Excel."); }, function(){ toast("Não consegui copiar. Use Baixar Excel."); });
+  };
+  $("cXls").onclick = function(){
+    var blob = new Blob(["﻿" + tabela(";")], {type:"text/csv;charset=utf-8"});
+    var a = document.createElement("a"), d = new Date();
+    a.href = URL.createObjectURL(blob);
+    a.download = "comparativo-nossa-terra-central-" + d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2) + ".csv";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+  };
 })();
 </script>
 </body>
