@@ -66,6 +66,16 @@
   table.rep th.q{text-align:right}
   table.rep td{padding:4px 8px;vertical-align:top;white-space:nowrap}
   table.rep tr[data-item] td.cod,table.rep tr[data-item] td.desc,table.rep tr[data-item] td.q,table.rep tr[data-item] td.uf{border-bottom:1px solid #eceeec}
+  .nfl{cursor:pointer;border-radius:4px;padding:0 2px}
+  .nfl:hover{background:var(--accent);color:#fff}
+  table.notes tr[data-key]{cursor:pointer}
+  table.notes tr[data-key]:hover td{background:var(--accent-soft)}
+  .modal{position:fixed;inset:0;background:rgba(20,25,22,.45);display:flex;align-items:flex-start;justify-content:center;padding:40px 14px;z-index:60;overflow:auto}
+  .modal .box{background:#fff;border-radius:12px;max-width:900px;width:100%;padding:18px 20px 16px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+  .modal h2{margin:0;font-size:19px}
+  .modal .meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:4px 16px;margin:10px 0 12px;font-size:13.5px}
+  .modal .meta span{color:var(--muted)}
+  .modal .mhead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
   table.rep td.nf{border-right:1px solid #444;border-left:1px solid #444;text-align:center;width:90px;font-variant-numeric:tabular-nums}
   table.rep td.nf.uf{font-weight:700;text-align:left}
   table.rep td.uf{width:60px;font-weight:600}
@@ -256,7 +266,7 @@
       <button class="btn" id="btnItemPdf" disabled>Baixar consulta (PDF)</button>
     </div>
     <div id="itemList"></div>
-    <p class="small" style="margin:8px 0 0">Dica: clicar numa linha do relatório abaixo também abre a consulta desse item.</p>
+    <p class="small" style="margin:8px 0 0">Dica: clicar numa linha do relatório abaixo também abre a consulta desse item. Clicar no número de uma nota mostra os itens dela.</p>
   </div>
 
   <div class="sheet" id="sheet">
@@ -715,7 +725,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       $("notesList").innerHTML = '<table class="notes"><thead><tr><th>NF</th><th>Série</th><th>Emissão</th><th>Destinatário</th><th>UF</th><th>Itens</th><th style="text-align:right">Valor</th></tr></thead><tbody>' +
         sorted.map(function(n){
           var d = n.dhEmi ? n.dhEmi.slice(0,10).split("-").reverse().join("/") : "";
-          return "<tr><td>"+esc(n.nNF)+"</td><td>"+esc(n.serie)+"</td><td>"+d+"</td><td>"+esc(n.dest)+"</td><td>"+esc(n.uf)+"</td><td>"+n.itens.length+
+          return '<tr data-key="' + esc(n.key) + '" title="Ver itens desta nota"><td><span class="nfl">'+esc(n.nNF)+"</span></td><td>"+esc(n.serie)+"</td><td>"+d+"</td><td>"+esc(n.dest)+"</td><td>"+esc(n.uf)+"</td><td>"+n.itens.length+
             '</td><td class="n">'+n.vNF.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+"</td></tr>";
         }).join("") + "</tbody></table>";
     }
@@ -728,7 +738,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     rs.forEach(function(r, i){
       var tc = r.tot ? (r.tot === 1 ? (r.grand ? " t gt" : " t") : " t2") : (r.sec ? " sec" : "");
       html += "<tr" + (r.item >= 0 ? ' data-item="' + r.item + '" title="Clique para ver em quais notas este item aparece"' : "") + ">" +
-        '<td class="' + (r.nfBox ? "nf" : "nfc") + (r.nfIsUf ? " uf" : "") + (r.nfLast ? " nflast" : "") + '">' + esc(r.nf) + "</td>" +
+        '<td class="' + (r.nfBox ? "nf" : "nfc") + (r.nfIsUf ? " uf" : "") + (r.nfLast ? " nflast" : "") + '">' +
+          ((r.nfBox && !r.nfIsUf && r.nf) ? r.nf.split(/\s+/).filter(Boolean).map(function(nn){ return '<span class="nfl" data-nf="' + esc(nn) + '" title="Ver itens da nota ' + esc(nn) + '">' + esc(nn) + "</span>"; }).join("  ") : esc(r.nf)) + "</td>" +
         '<td class="uf">' + esc(r.uf) + "</td>" +
         '<td class="cod' + tc + '">' + esc(r.cod) + "</td>" +
         '<td class="desc' + tc + '">' + esc(r.desc) +
@@ -793,7 +804,47 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (opts.length === 2) pickItem(Number(opts[1].value), false);   // só um resultado: já mostra
   });
   $("itemSel").addEventListener("change", function(){ pickItem(Number(this.value), false); });
+  // ---------- itens de uma nota (janela) ----------
+  function noteItemsHtml(n){
+    var useTrib = $("optQty").value === "trib";
+    var tv = 0, tq = {};
+    var rowsH = n.itens.map(function(it){
+      var u = useTrib ? (it.uTrib || it.uCom) : it.uCom, q = useTrib ? it.qTrib : it.qCom;
+      tv += it.vProd; tq[u] = r6((tq[u] || 0) + q);
+      return "<tr><td>" + esc(it.cProd) + "</td><td>" + esc(it.xProd) + '</td><td class="n">' + esc(fmt(q)) + "</td><td>" + esc(u) + '</td><td class="n">' + brl(it.vProd) + "</td></tr>";
+    }).join("");
+    var tqTxt = Object.keys(tq).map(function(u){ return fmt(tq[u]) + " " + u; }).join(" + ");
+    return '<div class="mhead"><h2>Nota ' + esc(n.nNF) + (n.serie ? ' <span class="small" style="font-weight:400">série ' + esc(n.serie) + "</span>" : "") + "</h2>" +
+      '<button class="btn" data-close="1">Fechar ✕</button></div>' +
+      '<div class="meta"><div><span>Destinatário</span><br><b>' + esc(n.dest) + "</b></div>" +
+      "<div><span>UF</span><br><b>" + esc(n.uf) + "</b></div>" +
+      "<div><span>Emissão</span><br><b>" + dBR(n.dhEmi) + "</b></div>" +
+      "<div><span>Valor da nota</span><br><b>" + brl(n.vNF) + "</b></div>" +
+      (n.pesoB ? "<div><span>Peso bruto</span><br><b>" + esc(fmt(n.pesoB)) + " kg</b></div>" : "") +
+      (n.warn && n.warn.length ? '<div style="grid-column:1/-1;color:var(--warn)">⚠ ' + esc(n.warn.join("; ")) + "</div>" : "") + "</div>" +
+      '<table class="notes"><thead><tr><th>CódProd</th><th>Descrição</th><th style="text-align:right">Qtde</th><th>Unid</th><th style="text-align:right">Valor</th></tr></thead><tbody>' + rowsH +
+      '</tbody><tfoot><tr><td colspan="2">TOTAL — ' + n.itens.length + ' item(ns)</td><td class="n" colspan="2">' + esc(tqTxt) + '</td><td class="n">' + brl(r2(tv)) + "</td></tr></tfoot></table>";
+  }
+  function showNotes(list){
+    if (!list.length) return;
+    closeNote();
+    var m = document.createElement("div"); m.className = "modal"; m.id = "noteModal";
+    m.innerHTML = list.map(function(n){ return '<div class="box" style="margin-bottom:14px">' + noteItemsHtml(n) + "</div>"; }).join("");
+    m.addEventListener("click", function(e){ if (e.target === m || (e.target.closest && e.target.closest("[data-close]"))) closeNote(); });
+    document.body.appendChild(m);
+    var b = m.querySelector("[data-close]"); if (b) b.focus();
+  }
+  function closeNote(){ var m = $("noteModal"); if (m) m.remove(); }
+  document.addEventListener("keydown", function(e){ if (e.key === "Escape") closeNote(); });
+  $("notesList").addEventListener("click", function(e){
+    var tr = e.target.closest && e.target.closest("tr[data-key]"); if (!tr) return;
+    var k = tr.getAttribute("data-key");
+    showNotes(notes.filter(function(n){ return n.key === k; }));
+  });
+
   $("repBody").addEventListener("click", function(e){
+    var sp = e.target.closest && e.target.closest(".nfl[data-nf]");
+    if (sp){ var nn = sp.getAttribute("data-nf"); showNotes(notes.filter(function(n){ return n.nNF === nn; })); return; }
     var tr = e.target.closest && e.target.closest("tr[data-item]");
     if (tr && !(window.getSelection && String(window.getSelection()).length)) pickItem(Number(tr.getAttribute("data-item")), true);
   });
